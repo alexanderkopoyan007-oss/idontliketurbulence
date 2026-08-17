@@ -39,9 +39,9 @@ function narrative(R){
     out.push(`The whole ${fmtDur(totalMin)} looks quiet at ${fmtFL(route.topFt)}, from ${dep.iata} through to ${arr.iata}.`);
     const w2 = worst;
     if (w2 && w2.edr > 0.05){
-      out.push(`The busiest moment is around <b>${hhmmUTC(w2.time)}</b>, ${w2.place.text.replace(/^(Over|Near) /, m => m.toLowerCase())} — still only ${w2.band.name.toLowerCase()}: ${w2.band.feel}`);
+      out.push(`The busiest moment is around <b>${hhmmUTC(w2.time)}</b>, ${w2.place.text.replace(/^(Over|Near) /, m => m.toLowerCase())} — still only ${w2.band.name.toLowerCase()}: ${feelText(w2.band)}`);
     } else {
-      out.push(`Expect ${BANDS[0].feel}`);
+      out.push(`Expect ${feelText(BANDS[0])}`);
     }
     const j = R.jet;
     if (j && j.spd >= 45) out.push(`There is a ${kt(j.spd)} kt jet near ${fmtFL(j.ft)}, but the route stays clear of the sheared air on its edges.`);
@@ -51,8 +51,8 @@ function narrative(R){
     const main  = spans[0];
     const where = worst.place ? worst.place.text.replace(/^(Over|Near) /, m => m.toLowerCase()) : "en route";
     out.push(`The roughest stretch runs <b>${hhmmUTC(main.a.time)}–${hhmmUTC(main.b.time)}</b>, about <b>${spanMin(main)} min</b> ${phaseWord(worst.phase)} — ${where}, at ${fmtFL(worst.altFt)}${worst.fix ? ` near ${worst.fix}` : ""}.`);
-    out.push(`Peak is <b>${worst.band.name.toLowerCase()}</b>: ${worst.band.feel}`);
-    if (worst.band.key >= 3) out.push(worst.band.cabin.charAt(0).toUpperCase() + worst.band.cabin.slice(1));
+    out.push(`Peak is <b>${worst.band.name.toLowerCase()}</b>: ${feelText(worst.band)}`);
+    if (worst.band.key >= 3){ const c = cabinText(worst.band); out.push(c.charAt(0).toUpperCase() + c.slice(1)); }
 
     /* Then the shape of the rest of the flight. */
     if (spans.length > 1){

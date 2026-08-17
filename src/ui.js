@@ -145,7 +145,7 @@ async function run(dep, arr, whenLocalValue, opts, extra, flightNo){
 
 function paint(){
   const R = RES, rt = R.route;
-  const v = verdictFor(R.felt);
+  const v = verdictWords(R.felt);   // calm mode swaps the headline, not the numbers
   $("#vDep").textContent = rt.dep.iata; $("#vArr").textContent = rt.arr.iata;
   $("#vMeta").innerHTML = `${Math.round(rt.distNM).toLocaleString()} nm · ${fmtDur(R.totalMin)} · ${fmtFL(rt.topFt)}` +
     (R.extra ? ` · ${R.extra}` : "");
@@ -157,6 +157,15 @@ function paint(){
   $("#vRough").innerHTML = R.roughMin >= 3
     ? `${Math.round(R.roughMin)} min of ${fmtDur(R.totalMin)}<br>at light or above`
     : `smooth for<br>essentially all of it`;
+
+  /* Calm mode adds a standing explainer under the verdict; normal mode removes it. */
+  const old = $("#calmBox"); if (old) old.remove();
+  if (CALM){
+    const box = document.createElement("div");
+    box.id = "calmBox";
+    box.innerHTML = calmPanelHTML(R);
+    $("#vSay").insertAdjacentElement("afterend", box);
+  }
 
   $("#legend").innerHTML = BANDS.map(b => `<i style="background:${b.col}">${b.name}</i>`).join("");
   $("#tapeA").innerHTML = `<b>${hhmmUTC(R.live[0].time)}</b> ${rt.dep.iata}`;

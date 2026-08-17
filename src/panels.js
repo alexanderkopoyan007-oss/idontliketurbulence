@@ -32,7 +32,8 @@ function reasonFor(w, R){
   }
   if (!bits.length) bits.push("Wind shear, stability and deformation are all unremarkable here. The model sees no reason for the air to break up.");
   /* Lead with the experience, then the physics behind it. */
-  bits.unshift(`<b>${w.band.name}</b> — ${w.band.feel} ${w.band.key >= 2 ? w.band.cabin.charAt(0).toUpperCase()+w.band.cabin.slice(1) : ""}`);
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  bits.unshift(`<b>${w.band.name}</b> — ${feelText(w.band)} ${w.band.key >= 2 ? cap(cabinText(w.band)) : ""}`);
   if (w.windComp) nums.push([w.windComp>0?"Tailwind":"Headwind", Math.abs(w.windComp)+" kt"]);
   return { bits, nums };
 }
