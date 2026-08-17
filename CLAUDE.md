@@ -46,7 +46,13 @@ src/
   render.js           verdict copy, ride tape, map
   xsection.js         vertical cross-section canvas
   panels.js           segment log, side blocks, methodology panel
+  astro.js            Sun/Moon position, rise/set, twilight, lunar phase (Meeus)
+  seeing.js           Cn² via Hufnagel-Valley, Fried parameter, transparency
   ui.js               typeahead, flight-number lookup, run orchestration, event wiring
+  share.js            URL hash state, Open Graph rewriting, copy-link
+  calm.js             anxious-flyer mode — reframes copy, never changes numbers
+  jetlag.js           circadian plan + the view router
+  seeingview.js       seeing page fetch and render
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -187,12 +193,39 @@ are rebuilt daily around the jet. Say so wherever the route is presented.
 
 ---
 
+## Views
+
+One file, three views, routed on the hash. The ride briefing is the default entry point.
+
+| Route | View | Notes |
+|---|---|---|
+| *(none)* or `#r=…` / `#f=…` | Ride briefing | the query state hash |
+| `#/jetlag` | Jet lag planner | no API — pure computation |
+| `#/seeing` | Seeing forecast | one location, far cheaper than a route |
+
+Route hashes start with `/`; query-state hashes do not. `restoreFromHash()` splits on that,
+and `HASH_SELF_WRITE` guards against the write→hashchange→restore feedback loop.
+
+## Rate limits are the binding constraint
+
+Open-Meteo's free tier meters **600/min, 5,000/hour, 10,000/day**, weighted by
+variables × locations × hours. This is the single biggest constraint on anything new:
+
+- One 32-point route briefing at default scale brushes the per-minute limit.
+- Sustained development against the live API hits the **hourly** limit, which does not
+  clear for an hour — budget for that when testing, and prefer the seeing view (1 location)
+  or a short hop (16 points) when you just need a smoke test.
+- Any feature that multiplies request count — a global grid, a 3D sample volume, a
+  departure-time sweep across 7 days — **needs its caching story settled before any
+  rendering work**, not after. Server-side caching of forecast fields is fine (they are
+  valid for hours); caching a route briefing is not (see hard rule 2).
+
 ## Commands
 
 ```bash
 ./build.sh              # src/ → www/index.html
 ./build.sh --check      # verify www/index.html matches a fresh build
-npm test                # vitest, 61 tests over geodesy / EDR / CAT physics
+npm test                # vitest, 137 tests: geodesy, EDR, CAT, astro, seeing, jetlag, share, calm
 ./start.sh              # serve www/ on :8080 (macOS ruby, no installs)
 ./stop.sh
 ```
