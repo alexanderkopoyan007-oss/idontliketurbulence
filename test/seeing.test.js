@@ -123,6 +123,45 @@ describe("seeing from a column", () => {
   });
 });
 
+describe("agreement with the HV5/7 benchmark", () => {
+  /* Hufnagel-Valley 5/7 is *defined* to give r0 = 5 cm and seeing ≈ 2.0″ at
+     500 nm for a 21 m/s Bufton wind. Driving this implementation at exactly that
+     wind, from sea level, must land on those numbers — otherwise the constants
+     or the integration have drifted. This is the one external anchor the model
+     has, so it is worth a regression test. */
+  const flat21 = () => {
+    const out = [];
+    for (let z = 0; z <= 24000; z += 1500)
+      out.push({ z, spd: 21, u: 21, v: 0, theta: 300 + 4*(z/1000), ft: z/0.3048, p: 1000 - z/30 });
+    return out;
+  };
+
+  it("has a Bufton wind of exactly 21 m/s for the reference column", () => {
+    expect(S.buftonWind(flat21())).toBeCloseTo(21, 6);
+  });
+
+  it("reproduces r0 ≈ 5 cm at sea level", () => {
+    const r = S.seeingFrom(flat21(), 0);
+    expect(r.r0Total*100).toBeGreaterThan(4.5);
+    expect(r.r0Total*100).toBeLessThan(6.0);
+  });
+
+  it("reproduces total seeing ≈ 2.0 arcsec at sea level", () => {
+    const r = S.seeingFrom(flat21(), 0);
+    expect(r.seeingTotal).toBeGreaterThan(1.7);
+    expect(r.seeingTotal).toBeLessThan(2.3);
+  });
+
+  it("improves markedly for a site only tens of metres up", () => {
+    // The ground term has a 100 m scale height, so even 64 m removes a large
+    // share of it. This is why the live TFS run reads better than HV5/7 — it is
+    // the model working, not a discrepancy.
+    const sea = S.seeingFrom(flat21(), 0), up = S.seeingFrom(flat21(), 64);
+    expect(up.seeingTotal).toBeLessThan(sea.seeingTotal);
+    expect(up.r0Total).toBeGreaterThan(sea.r0Total);
+  });
+});
+
 describe("seeing bands", () => {
   it("orders from excellent to very poor", () => {
     expect(S.seeingBand(0.5).name).toBe("Excellent");
