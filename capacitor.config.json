@@ -1,0 +1,17 @@
+{
+  "appId": "com.yourcompany.ridereport",
+  "appName": "Ride Report",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#070B14",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#070B14",
+      "showSpinner": false
+    }
+  }
+}

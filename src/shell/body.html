@@ -1,0 +1,196 @@
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="logo">
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path d="M3 21c3-4 5.5-4 8.5 0s5.5 4 8.5 0 5.5-4 8.5 0" stroke="#1FC8B4" stroke-width="2" stroke-linecap="round"/>
+      <path d="M3 27c3-2.2 5.5-2.2 8.5 0s5.5 2.2 8.5 0 5.5-2.2 8.5 0" stroke="#2B3B54" stroke-width="2" stroke-linecap="round"/>
+      <path d="M16.6 3.2 20 11l8.4 3.4c.6.2.6 1.1 0 1.3L20 19l-1.2 2.7c-1.1-1.1-2.2-1.7-3.4-1.7-1.9 0-3.3 1.4-4.9 3l-.6-.6L13 15l-4.6 1.6-1.7 2.6-1.5-.5 1.4-4.4-2-4.2 1.5-.6 2.3 2.1L13 9.9l-2.8-6.6.7-.6c1.6 1.6 3 3 4.9 3 .3 0 .6 0 .8-.1Z" fill="#FFB03A"/>
+    </svg>
+    <div>
+      <b>Ride Report</b>
+      <span>Pre-flight turbulence briefing</span>
+    </div>
+  </div>
+  <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
+</header>
+
+<!-- ── query strip ── -->
+<section class="strip" aria-label="Build a briefing">
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tabRoute" role="tab" aria-selected="true" aria-controls="pRoute">Airports</button>
+    <button class="tab" id="tabFlight" role="tab" aria-selected="false" aria-controls="pFlight">Flight number</button>
+  </div>
+
+  <div class="panelbox" id="pRoute" role="tabpanel" aria-labelledby="tabRoute">
+    <div class="fields">
+      <div class="f f-4">
+        <label for="dep">Departure airport</label>
+        <input id="dep" autocomplete="off" spellcheck="false" placeholder="MXP, Milan, LIMC…">
+        <div class="ac" id="acDep"></div>
+      </div>
+      <button class="swap" id="swap" title="Reverse the route" aria-label="Reverse the route">⇄</button>
+      <div class="f f-4">
+        <label for="arr">Arrival airport</label>
+        <input id="arr" autocomplete="off" spellcheck="false" placeholder="JFK, New York, KJFK…">
+        <div class="ac" id="acArr"></div>
+      </div>
+      <div class="f f-3">
+        <label for="dt1">Departure (local at origin)</label>
+        <input id="dt1" type="datetime-local">
+      </div>
+    </div>
+    <div class="fields" style="margin-top:12px">
+      <div class="f f-3">
+        <label for="acft">Aircraft</label>
+        <select id="acft">
+          <option value="wide">Widebody — 777, 787, A350, A330</option>
+          <option value="narrow" selected>Narrowbody — 737, A320, A321</option>
+          <option value="regional">Regional jet — E175, CRJ, ATR</option>
+          <option value="jumbo">Very large — A380, 747</option>
+          <option value="bizjet">Light / business jet</option>
+        </select>
+      </div>
+      <div class="f f-3">
+        <label for="fl">Cruise level</label>
+        <select id="fl">
+          <option value="auto" selected>Pick automatically</option>
+          <option value="280">FL280 · 28,000 ft</option><option value="300">FL300 · 30,000 ft</option>
+          <option value="320">FL320 · 32,000 ft</option><option value="340">FL340 · 34,000 ft</option>
+          <option value="360">FL360 · 36,000 ft</option><option value="380">FL380 · 38,000 ft</option>
+          <option value="400">FL400 · 40,000 ft</option><option value="410">FL410 · 41,000 ft</option>
+        </select>
+      </div>
+      <div class="f f-3">
+        <label for="scale">Analysis scale <span class="rd" id="scaleRd">±90 km</span></label>
+        <input type="range" id="scale" min="20" max="200" step="5" value="90">
+        <span class="sub" id="scaleSub">balanced · ~30 sample points on a transatlantic leg</span>
+      </div>
+      <button class="go" id="goRoute">Build briefing</button>
+    </div>
+    <p class="hint">Type a city, an <b>IATA</b> code (MXP) or an <b>ICAO</b> code (LIMC). Forecasts run to about 7 days ahead.</p>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="panelbox" id="pFlight" role="tabpanel" aria-labelledby="tabFlight" hidden>
+    <div class="fields">
+      <div class="f f-4">
+        <label for="fnum">Flight number</label>
+        <input id="fnum" autocomplete="off" spellcheck="false" placeholder="BA117, AZ610, FR8145…" style="text-transform:uppercase">
+      </div>
+      <div class="f f-3">
+        <label for="dt2">Departure date &amp; time (local)</label>
+        <input id="dt2" type="datetime-local">
+      </div>
+      <div class="f f-2">
+        <label for="acft2">Aircraft</label>
+        <select id="acft2">
+          <option value="wide">Widebody</option><option value="narrow" selected>Narrowbody</option>
+          <option value="regional">Regional</option><option value="jumbo">Very large</option><option value="bizjet">Light jet</option>
+        </select>
+      </div>
+      <button class="go" id="goFlight">Look up &amp; build</button>
+    </div>
+    <p class="hint">The route comes from a public callsign database. If the flight isn't listed, switch to <b>Airports</b> and enter the pair by hand.</p>
+    <div class="chips" id="chips2"></div>
+  </div>
+</section>
+
+<div id="status"></div>
+
+<!-- ── results ── -->
+<main id="out">
+  <section class="verdict">
+    <div class="v-head">
+      <div>
+        <div class="v-route">
+          <span class="code mono" id="vDep">—</span>
+          <span class="arw">✈</span>
+          <span class="code mono" id="vArr">—</span>
+          <span class="meta" id="vMeta"></span>
+        </div>
+        <h2 class="v-word" id="vWord">—</h2>
+        <p class="v-say" id="vSay"></p>
+      </div>
+      <div class="score">
+        <div><div class="n mono" id="vScore">—</div><span class="u">Ride score /100</span></div>
+        <div class="sub" id="vRough"></div>
+      </div>
+    </div>
+
+    <div class="tape-wrap">
+      <div class="tape-head">
+        <span class="eyebrow">Ride tape — takeoff to landing</span>
+        <span class="read mono" id="tapeRead"><em>drag to scrub</em></span>
+      </div>
+      <div class="tape" id="tape" tabindex="0" role="slider" aria-label="Scrub through the flight" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <canvas id="tapeC"></canvas>
+        <div class="cur" id="tapeCur" style="left:0"></div>
+      </div>
+      <div class="tape-axis"><span id="tapeA">—</span><span id="tapeB">—</span><span id="tapeC2">—</span></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <header><h3>Route &amp; hotspots</h3><span class="tag" id="mapTag"></span></header>
+      <div id="map"></div>
+    </section>
+
+    <section class="card">
+      <header><h3>Vertical cross-section</h3><span class="tag">Flight level vs. distance</span></header>
+      <div class="xs" id="xsWrap">
+        <canvas id="xs"></canvas>
+        <div class="xcur" id="xsCur"></div>
+        <div class="xs-tip" id="xsTip"></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px">
+    <header><h3>Segment log</h3><span class="tag">Tap a row for the reasoning</span></header>
+    <div class="scroller">
+      <table class="log">
+        <thead><tr>
+          <th style="width:15%">Time</th><th>Position</th><th class="hideS" style="width:9%">Level</th>
+          <th style="width:22%">Expected ride</th><th class="hideS" style="width:13%">EDR</th>
+        </tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="blocks">
+    <section class="card">
+      <header><h3>Smoother levels</h3><span class="tag">Cruise only</span></header>
+      <div class="pad" id="levels"></div>
+    </section>
+    <section class="card">
+      <header><h3>Forecast confidence</h3><span class="tag" id="confTag"></span></header>
+      <div class="pad" id="conf"></div>
+    </section>
+    <section class="card">
+      <header><h3>What's driving it</h3><span class="tag">Peak contributions</span></header>
+      <div class="pad" id="drivers"></div>
+    </section>
+  </div>
+
+  <details class="meth">
+    <summary>How this forecast is built, and where it comes from</summary>
+    <div class="pad src" id="method"></div>
+  </details>
+
+  <p class="foot" id="foot"></p>
+</main>
+
+<p class="foot" id="footStatic">
+  <b>Read this as a planning aid, not an operational product.</b>
+  Ride Report is built from public numerical weather model data and standard clear-air-turbulence diagnostics.
+  It is not a flight-planning tool, it is not certified for aviation use, and it has no access to your actual filed route,
+  assigned flight levels, or the dispatcher's turbulence forecast. Crews get better data than this. If a captain says sit down, sit down.
+</p>
+
+</div>

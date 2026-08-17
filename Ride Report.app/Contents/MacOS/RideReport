@@ -1,0 +1,2 @@
+#!/bin/bash
+exec "/Users/alexanderkopoyan/Sites/ride-report/start.sh"
