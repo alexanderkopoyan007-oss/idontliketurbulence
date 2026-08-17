@@ -477,6 +477,7 @@ body.calm #vWord{ color:var(--vellum)!important }
   <nav class="views" aria-label="Sections">
     <button class="viewt on" id="vRide" aria-current="page">Ride</button>
     <button class="viewt" id="vJet">Jet lag</button>
+    <button class="viewt" id="vSee">Seeing</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -529,6 +530,32 @@ body.calm #vWord{ color:var(--vellum)!important }
   </div>
   <div id="jlStatus"></div>
   <div id="jlOut"></div>
+</section>
+
+<!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="seeingView" hidden aria-label="Astronomical seeing forecast">
+  <h2 class="jl-title">Seeing forecast</h2>
+  <p class="jl-intro">
+    Astronomical seeing is dominated by turbulence near the jet stream — the same shear this
+    site already computes for aircraft. This points that engine at the ground instead of a
+    flight path and reports tonight's free-atmosphere seeing hour by hour.
+  </p>
+  <div class="fields">
+    <div class="f f-5">
+      <label for="seLoc">Location (nearest airport works)</label>
+      <input id="seLoc" autocomplete="off" spellcheck="false" placeholder="TFN, Tenerife…">
+      <div class="ac" id="acSee"></div>
+    </div>
+    <div class="f f-3">
+      <label for="seDate">Night of</label>
+      <input type="date" id="seDate">
+    </div>
+    <div class="f f-3 f-go">
+      <button class="go" id="seGo">Forecast tonight</button>
+    </div>
+  </div>
+  <div id="seStatus"></div>
+  <div id="seOut"></div>
 </section>
 
 <!-- ── query strip ── -->
@@ -7356,6 +7383,334 @@ function drawMethod(){
 </script>
 <script>
 "use strict";
+/* ══════════ ASTRONOMY ═══════════════════════════════════════════════════
+   Sun and Moon positions, rise/set, twilight and lunar phase. No API, no data
+   files: these are closed-form series and the sky is not a forecast.
+
+   Accuracy is Meeus's low-precision solar/lunar theory — around 0.01° for the
+   Sun and 0.1–0.3° for the Moon over the years this app cares about. That is
+   far better than needed for "is it dark" and "where is the Moon", and it is
+   the same maths the window-seat and seeing pages both need, so it lives here
+   rather than in either of them.
+
+   Reference: Meeus, "Astronomical Algorithms", 2nd ed., chapters 12, 13, 22,
+   25 and 47. Refraction at the horizon follows the conventional −0.833°
+   standard altitude for the Sun's upper limb. */
+
+const DEG = Math.PI/180;
+const J2000 = 2451545.0;
+
+const toJulian  = d => d.getTime()/86400000 + 2440587.5;
+const fromJulian = j => new Date((j - 2440587.5) * 86400000);
+const centuries = j => (j - J2000)/36525;
+const norm360 = a => ((a % 360) + 360) % 360;
+
+/* ── obliquity and sidereal time ─────────────────────────────────────── */
+function obliquity(T){
+  return 23.439291 - 0.0130042*T - 1.64e-7*T*T + 5.04e-7*T*T*T;   // degrees
+}
+function gmst(j){
+  const T = centuries(j);
+  return norm360(280.46061837 + 360.98564736629*(j - J2000) + 0.000387933*T*T - T*T*T/38710000);
+}
+
+/* ── Sun ─────────────────────────────────────────────────────────────── */
+function sunPosition(j){
+  const T = centuries(j);
+  const L0 = norm360(280.46646 + 36000.76983*T + 0.0003032*T*T);       // mean longitude
+  const M  = norm360(357.52911 + 35999.05029*T - 0.0001537*T*T);       // mean anomaly
+  const Mr = M*DEG;
+  const C  = (1.914602 - 0.004817*T - 0.000014*T*T)*Math.sin(Mr)
+           + (0.019993 - 0.000101*T)*Math.sin(2*Mr)
+           + 0.000289*Math.sin(3*Mr);
+  const trueLon = L0 + C;
+  const lambda  = trueLon - 0.00569 - 0.00478*Math.sin((125.04 - 1934.136*T)*DEG);
+  const eps = obliquity(T)*DEG;
+  const lr  = lambda*DEG;
+  return {
+    ra:  norm360(Math.atan2(Math.cos(eps)*Math.sin(lr), Math.cos(lr))/DEG),
+    dec: Math.asin(Math.sin(eps)*Math.sin(lr))/DEG,
+    lambda: norm360(lambda),
+    /* distance in AU, for the Moon's illuminated-fraction geometry */
+    R: 1.000001018*(1 - 0.016708634*0.016708634 - 0.000042037*T*0.000042037)
+       / (1 + 0.016708634*Math.cos(Mr + C*DEG)),
+  };
+}
+
+/* ── Moon ────────────────────────────────────────────────────────────── */
+function moonPosition(j){
+  const T = centuries(j);
+  const Lp = norm360(218.3164477 + 481267.88123421*T - 0.0015786*T*T);   // mean longitude
+  const D  = norm360(297.8501921 + 445267.1114034*T - 0.0018819*T*T)*DEG; // mean elongation
+  const M  = norm360(357.5291092 + 35999.0502909*T)*DEG;                  // Sun's mean anomaly
+  const Mp = norm360(134.9633964 + 477198.8675055*T + 0.0087414*T*T)*DEG; // Moon's mean anomaly
+  const F  = norm360(93.2720950 + 483202.0175233*T - 0.0036539*T*T)*DEG;  // argument of latitude
+
+  /* Principal periodic terms — enough for a few arcminutes. */
+  const lon = Lp
+    + 6.289*Math.sin(Mp)     - 1.274*Math.sin(2*D - Mp) + 0.658*Math.sin(2*D)
+    + 0.214*Math.sin(2*Mp)   - 0.186*Math.sin(M)        - 0.114*Math.sin(2*F)
+    + 0.059*Math.sin(2*D - 2*Mp) + 0.057*Math.sin(2*D - M - Mp)
+    + 0.053*Math.sin(2*D + Mp)   + 0.046*Math.sin(2*D - M)
+    - 0.041*Math.sin(M - Mp);
+  const lat = 5.128*Math.sin(F)
+    + 0.281*Math.sin(Mp + F) - 0.278*Math.sin(F - Mp) + 0.176*Math.sin(2*D - F)
+    + 0.115*Math.sin(2*D - Mp + F) - 0.055*Math.sin(2*D - Mp - F);
+  const dist = 385000.56 - 20905.355*Math.cos(Mp) - 3699.111*Math.cos(2*D - Mp)
+             - 2955.968*Math.cos(2*D) - 569.925*Math.cos(2*Mp);   // km
+
+  const eps = obliquity(T)*DEG, lr = lon*DEG, br = lat*DEG;
+  return {
+    ra: norm360(Math.atan2(Math.sin(lr)*Math.cos(eps) - Math.tan(br)*Math.sin(eps), Math.cos(lr))/DEG),
+    dec: Math.asin(Math.sin(br)*Math.cos(eps) + Math.cos(br)*Math.sin(eps)*Math.sin(lr))/DEG,
+    dist, lambda: norm360(lon), beta: lat,
+  };
+}
+
+/* Illuminated fraction and phase angle. 0 = new, 0.5 = full. */
+function moonPhase(j){
+  const s = sunPosition(j), m = moonPosition(j);
+  const sunDistKm = s.R * 149597870.7;
+  /* Geocentric elongation of the Moon from the Sun. */
+  const psi = Math.acos(
+    Math.sin(s.dec*DEG)*Math.sin(m.dec*DEG) +
+    Math.cos(s.dec*DEG)*Math.cos(m.dec*DEG)*Math.cos((s.ra - m.ra)*DEG));
+  /* Phase angle at the Moon, from the triangle Sun–Moon–Earth. */
+  const i = Math.atan2(sunDistKm*Math.sin(psi), m.dist - sunDistKm*Math.cos(psi));
+  const illum = (1 + Math.cos(i))/2;
+  /* Waxing or waning, from the difference in ecliptic longitude. */
+  const d = norm360(m.lambda - s.lambda);
+  return {
+    illum,
+    waxing: d < 180,
+    age: d/360 * 29.530588853,                 // days since new moon
+    name: phaseName(d, illum),
+  };
+}
+function phaseName(elongDeg, illum){
+  if (illum < 0.02) return "New";
+  if (illum > 0.98) return "Full";
+  const waxing = elongDeg < 180;
+  if (Math.abs(illum - 0.5) < 0.06) return waxing ? "First quarter" : "Last quarter";
+  if (illum < 0.5) return waxing ? "Waxing crescent" : "Waning crescent";
+  return waxing ? "Waxing gibbous" : "Waning gibbous";
+}
+
+/* ── horizontal coordinates ──────────────────────────────────────────── */
+function altAz(ra, dec, j, lat, lon){
+  const H = (gmst(j) + lon - ra)*DEG;      // local hour angle, east longitude positive
+  const p = lat*DEG, d = dec*DEG;
+  const alt = Math.asin(Math.sin(p)*Math.sin(d) + Math.cos(p)*Math.cos(d)*Math.cos(H));
+  const az  = Math.atan2(Math.sin(H), Math.cos(H)*Math.sin(p) - Math.tan(d)*Math.cos(p));
+  return { alt: alt/DEG, az: norm360(az/DEG + 180) };   // az from north, clockwise
+}
+const sunAltAz  = (date, lat, lon) => { const j = toJulian(date); return altAz(sunPosition(j).ra,  sunPosition(j).dec,  j, lat, lon); };
+const moonAltAz = (date, lat, lon) => { const j = toJulian(date); const m = moonPosition(j); return altAz(m.ra, m.dec, j, lat, lon); };
+
+/* ── rise / set / twilight ───────────────────────────────────────────── */
+/* Scan the day in coarse steps and bisect any crossing of the target altitude.
+   Robust at high latitude, where a closed-form solution has no answer at all:
+   this simply returns null when the body never crosses, which is the truth. */
+function crossings(date, lat, lon, targetAlt, bodyFn, stepMin = 10){
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const out = { rise: null, set: null };
+  let prevT = start, prevA = bodyFn(start, lat, lon).alt - targetAlt;
+  for (let m = stepMin; m <= 1440; m += stepMin){
+    const t = new Date(start.getTime() + m*60000);
+    const a = bodyFn(t, lat, lon).alt - targetAlt;
+    if (prevA <= 0 && a > 0 && !out.rise) out.rise = bisect(prevT, t, lat, lon, targetAlt, bodyFn);
+    if (prevA >= 0 && a < 0 && !out.set)  out.set  = bisect(prevT, t, lat, lon, targetAlt, bodyFn);
+    prevT = t; prevA = a;
+  }
+  return out;
+}
+function bisect(t0, t1, lat, lon, target, bodyFn){
+  let a = t0.getTime(), b = t1.getTime();
+  for (let i = 0; i < 24; i++){
+    const mid = (a + b)/2, v = bodyFn(new Date(mid), lat, lon).alt - target;
+    const va = bodyFn(new Date(a), lat, lon).alt - target;
+    if ((va <= 0) === (v <= 0)) a = mid; else b = mid;
+  }
+  return new Date((a + b)/2);
+}
+
+const SUN_ALT = { rise:-0.833, civil:-6, nautical:-12, astronomical:-18 };
+
+function sunTimes(date, lat, lon){
+  const r = {};
+  for (const [k, alt] of Object.entries(SUN_ALT)){
+    const c = crossings(date, lat, lon, alt, sunAltAz);
+    r[k] = c;
+  }
+  return {
+    sunrise: r.rise.rise, sunset: r.rise.set,
+    civilDawn: r.civil.rise, civilDusk: r.civil.set,
+    nauticalDawn: r.nautical.rise, nauticalDusk: r.nautical.set,
+    astroDawn: r.astronomical.rise, astroDusk: r.astronomical.set,
+  };
+}
+const moonTimes = (date, lat, lon) => crossings(date, lat, lon, 0.125, moonAltAz);
+</script>
+<script>
+"use strict";
+/* ══════════ ASTRONOMICAL SEEING ═════════════════════════════════════════
+   Seeing is caused by the same thing this app already forecasts for aircraft:
+   wind shear in the upper troposphere near the jet stream. Optical turbulence
+   and clear-air turbulence are two consequences of one mechanism, so the engine
+   points at a fixed location instead of a flight path and the same shear and
+   stability fields come back out as arcseconds instead of EDR.
+
+   THE CHAIN
+   ---------
+   Refractive-index structure constant Cn²(h) → integrate over the column → the
+   Fried parameter r0 → seeing FWHM.
+
+     r0    = (0.423 · k² · ∫Cn² dh)^(−3/5),   k = 2π/λ
+     FWHM  = 0.98 · λ / r0                    (radians)
+
+   Cn²(h) uses the Hufnagel-Valley functional form, but driven by the actual
+   forecast wind rather than HV's fixed climatological profile:
+
+     Cn²(h) = 0.00594·(v/27)²·(10⁻⁵h)^10·e^(−h/1000)     upper, wind-driven
+            + 2.7e−16·e^(−h/1500)                        mid troposphere
+            + A·e^(−h/100)                               ground layer
+
+   where v is the Bufton wind — the RMS wind speed between 5 and 20 km — computed
+   here from the forecast pressure-level winds. That is what makes this a forecast
+   rather than a climatology: when the jet is overhead, v rises, the upper term
+   rises as v², and the seeing degrades.
+
+   Each layer is additionally weighted by its local vertical wind shear relative
+   to a reference shear, since optical turbulence is generated where the flow is
+   shearing (Tatarski). This is a heuristic scaling, not a first-principles
+   derivation, and the panel says so.
+
+   WHAT THIS CANNOT KNOW — stated because it is the dominant term at most sites
+   -------------------------------------------------------------------------
+   The ground layer, the first few tens of metres, usually contributes MORE than
+   the whole free atmosphere above it, and it depends on the ground you are
+   standing on: a rooftop, a car park, a grass field and a mountain ridge behave
+   completely differently and none of it is resolved by a 25 km model grid. So
+   this page reports FREE-ATMOSPHERE seeing — the part that genuinely varies from
+   night to night with the jet — and states an assumed ground term separately
+   rather than pretending to predict what your own back garden is doing. */
+
+const SEE = {
+  LAMBDA: 500e-9,          // metres, V band
+  ARCSEC: 206264.806,      // radians → arcseconds
+  GROUND_A: 1.7e-14,       // HV5/7 ground-layer coefficient, m^(-2/3)
+  FREE_FLOOR: 1000,        // integrate the "free atmosphere" above this height, m
+  TOP: 25000,              // integration ceiling, m
+  REF_SHEAR: 0.004,        // reference vertical shear, s^-1 (~4 m/s per km)
+};
+
+/* Bufton wind: RMS wind speed through the 5–20 km slab, the quantity the
+   Hufnagel-Valley upper term is defined against. */
+function buftonWind(levels){
+  let sum = 0, span = 0;
+  for (let k = 0; k < levels.length - 1; k++){
+    const a = levels[k], b = levels[k+1];
+    if (!a || !b) continue;
+    const z0 = Math.max(a.z, 5000), z1 = Math.min(b.z, 20000);
+    if (z1 <= z0) continue;
+    /* Interpolate the wind to the clamped bounds. Using the raw level speeds
+       would let a level outside the slab contribute to a segment that only
+       partly overlaps it — a 200 m/s surface wind leaking into the 5 km edge. */
+    const dz = b.z - a.z;
+    const at = z => dz > 0 ? a.spd + (b.spd - a.spd)*((z - a.z)/dz) : a.spd;
+    const s0 = at(z0), s1 = at(z1);
+    sum += (s0*s0 + s1*s1)/2*(z1 - z0);      // trapezoidal integral of V²
+    span += (z1 - z0);
+  }
+  return span > 0 ? Math.sqrt(sum/span) : 0;
+}
+
+/* Local vertical wind shear at height h, interpolated from the level stack. */
+function shearAt(levels, h){
+  for (let k = 0; k < levels.length - 1; k++){
+    const a = levels[k], b = levels[k+1];
+    if (!a || !b) continue;
+    if (h >= a.z && h <= b.z){
+      const dz = b.z - a.z;
+      if (!(dz > 1)) continue;
+      return Math.hypot(b.u - a.u, b.v - a.v)/dz;
+    }
+  }
+  return null;
+}
+
+/** Cn² at height h (metres above sea level), m^(-2/3). */
+function cn2At(h, v, levels, groundA){
+  const upper = 0.00594*Math.pow(v/27, 2)*Math.pow(1e-5*h, 10)*Math.exp(-h/1000);
+  const mid   = 2.7e-16*Math.exp(-h/1500);
+  const grd   = groundA*Math.exp(-h/100);
+  /* Shear weighting: layers shearing harder than the reference generate more
+     optical turbulence. Bounded so a single noisy level cannot dominate. */
+  const s = shearAt(levels, h);
+  const w = s === null ? 1 : clamp(Math.pow(s/SEE.REF_SHEAR, 2/3), 0.5, 2.5);
+  return (upper + mid)*w + grd;
+}
+
+/**
+ * @param {Array} levels  profileAt() output for the site (z, u, v, spd, theta)
+ * @param {number} siteElevM
+ * @returns {{seeingFree:number, seeingTotal:number, r0Free:number, bufton:number, mu:number}}
+ */
+function seeingFrom(levels, siteElevM = 0){
+  const usable = levels.filter(Boolean);
+  if (usable.length < 4) return null;
+  const v = buftonWind(usable);
+
+  const k = 2*Math.PI/SEE.LAMBDA;
+  /* Trapezoidal integration of Cn² in 50 m steps. Fine enough that the ground
+     term's 100 m scale height is resolved. */
+  const step = 50;
+  let muFree = 0, muTotal = 0;
+  for (let h = siteElevM; h < SEE.TOP; h += step){
+    const c0 = cn2At(h, v, usable, SEE.GROUND_A);
+    const c1 = cn2At(h + step, v, usable, SEE.GROUND_A);
+    const seg = (c0 + c1)/2*step;
+    muTotal += seg;
+    if (h >= siteElevM + SEE.FREE_FLOOR) muFree += seg;
+  }
+  const r0 = mu => Math.pow(0.423*k*k*mu, -3/5);
+  const fwhm = r0v => 0.98*SEE.LAMBDA/r0v*SEE.ARCSEC;
+
+  return {
+    bufton: v,
+    muFree, muTotal,
+    r0Free:  r0(muFree),
+    r0Total: r0(muTotal),
+    seeingFree:  fwhm(r0(muFree)),
+    seeingTotal: fwhm(r0(muTotal)),
+  };
+}
+
+/* Qualitative bands, matching how observers actually talk about a night. */
+const SEEING_BANDS = [
+  { max:0.7, name:"Excellent", col:"#1FC8B4", say:"planetary detail holds steady; high magnification is worth it" },
+  { max:1.0, name:"Good",      col:"#9BD93F", say:"crisp for most targets, occasional soft moments" },
+  { max:1.5, name:"Average",   col:"#FFC93C", say:"usable. Deep-sky is fine; planets will boil at high power" },
+  { max:2.5, name:"Poor",      col:"#FF8A3D", say:"soft. Stick to low power and large targets" },
+  { max:99,  name:"Very poor", col:"#F04A63", say:"the atmosphere is doing the observing tonight, not you" },
+];
+const seeingBand = a => SEEING_BANDS.find(b => a < b.max) || SEEING_BANDS[SEEING_BANDS.length-1];
+
+/* Transparency from layered cloud plus precipitable water. Cloud dominates
+   utterly — no amount of dry air rescues an overcast sky. */
+function transparency(cloudLow, cloudMid, cloudHigh, pwvMm){
+  const c = [cloudLow, cloudMid, cloudHigh].map(x => (x == null ? null : clamp(x/100, 0, 1)));
+  if (c.some(x => x === null)) return null;
+  /* High cirrus is the observer's real enemy per unit coverage: it is thin
+     enough to look clear and still kills contrast. */
+  const blocked = 1 - (1 - c[0])*(1 - c[1])*(1 - 0.85*c[2]);
+  let score = (1 - blocked)*100;
+  if (pwvMm != null) score *= clamp(1 - (pwvMm - 5)/60, 0.55, 1);   // damp for humid columns
+  return { blocked: blocked*100, score: clamp(score, 0, 100), pwv: pwvMm };
+}
+</script>
+<script>
+"use strict";
 /* ══════════ TYPEAHEAD ══════════════════════════════════════════════════ */
 function makeAC(inputId, boxId){
   const inp = $("#"+inputId), box = $("#"+boxId);
@@ -7726,7 +8081,7 @@ function restoreFromHash(){
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return false;
   /* Route hashes (#/jetlag) belong to the view router, not the query state. */
-  if (raw.startsWith("/")){ showView(raw.slice(1) === "jetlag" ? "jetlag" : "ride"); return false; }
+  if (raw.startsWith("/")){ showView(raw.slice(1)); return false; }
   const p = new URLSearchParams(raw);
   const flight = p.get("f");
   const route  = p.get("r");
@@ -8175,29 +8530,42 @@ let AC_JL_DEP = null, AC_JL_ARR = null;
 /* Two views in one file. The ride briefing stays the default entry point; the
    planner is a sibling, reachable at #/jetlag so it can be linked directly
    without colliding with the query-state hash. */
+const VIEWS = {
+  ride:   { nav:"#vRide", section:null,          hash:"" },
+  jetlag: { nav:"#vJet",  section:"#jetlagView", hash:"#/jetlag" },
+  seeing: { nav:"#vSee",  section:"#seeingView", hash:"#/seeing" },
+};
+
 function showView(which){
-  const jet = which === "jetlag";
-  $("#jetlagView").hidden = !jet;
-  ["#pRoute", "#pFlight"].forEach(s => { const el = $(s); if (el) el.closest(".strip").hidden = jet; });
-  const out = $("#out");     if (out) out.hidden = jet;
-  const fs  = $("#footStatic"); if (fs) fs.hidden = jet;
-  $("#vRide").classList.toggle("on", !jet);
-  $("#vJet").classList.toggle("on", jet);
-  $("#vRide").setAttribute("aria-current", jet ? "false" : "page");
-  $("#vJet").setAttribute("aria-current", jet ? "page" : "false");
+  const view = VIEWS[which] ? which : "ride";
+  const ride = view === "ride";
+  for (const [name, v] of Object.entries(VIEWS)){
+    if (v.section){ const el = $(v.section); if (el) el.hidden = name !== view; }
+    const nav = $(v.nav);
+    if (nav){
+      nav.classList.toggle("on", name === view);
+      nav.setAttribute("aria-current", name === view ? "page" : "false");
+    }
+  }
+  /* The briefing's own strip and output belong to the ride view. */
+  const strip = $("#pRoute") && $("#pRoute").closest(".strip");
+  if (strip) strip.hidden = !ride;
+  const out = $("#out");        if (out) out.hidden = !ride;
+  const fs  = $("#footStatic"); if (fs)  fs.hidden  = !ride;
+}
+
+function goView(which){
+  showView(which);
+  HASH_SELF_WRITE = true;
+  const h = VIEWS[which] ? VIEWS[which].hash : "";
+  history.replaceState(null, "", location.pathname + h);
 }
 
 function mountJetlag(){
   if (!$("#jlDep")) return;
-  $("#vRide").addEventListener("click", () => {
-    showView("ride");
-    if (location.hash === "#/jetlag"){ HASH_SELF_WRITE = true; history.replaceState(null, "", location.pathname); }
-  });
-  $("#vJet").addEventListener("click", () => {
-    showView("jetlag");
-    HASH_SELF_WRITE = true;
-    history.replaceState(null, "", location.pathname + "#/jetlag");
-  });
+  $("#vRide").addEventListener("click", () => goView("ride"));
+  $("#vJet").addEventListener("click",  () => goView("jetlag"));
+  const se = $("#vSee"); if (se) se.addEventListener("click", () => goView("seeing"));
   AC_JL_DEP = makeAC("jlDep", "acJlDep");
   AC_JL_ARR = makeAC("jlArr", "acJlArr");
   const d = new Date(Date.now() + 3*3600e3); d.setMinutes(0,0,0);
@@ -8205,6 +8573,173 @@ function mountJetlag(){
   $("#jlGo").addEventListener("click", runJetlag);
   [$("#jlBed"), $("#jlWake")].forEach(el =>
     el.addEventListener("keydown", e => { if (e.key === "Enter") runJetlag(); }));
+}
+"use strict";
+/* ══════════ SEEING VIEW ═════════════════════════════════════════════════
+   Hour-by-hour observing conditions for tonight at one location. Reuses the
+   pressure-level fetch, the profile reader and the airport table; the only new
+   physics is in seeing.js and astro.js. */
+
+let SEE_LAST = null;
+let AC_SEE = null;
+
+function seeingNightWindow(date, lat, lon){
+  /* The observing night runs from this evening's dusk to tomorrow's dawn, so it
+     straddles midnight. Prefer astronomical darkness; fall back to nautical and
+     then civil at latitudes or seasons where the Sun never gets low enough —
+     and say which one was used rather than silently substituting. */
+  const t0 = sunTimes(date, lat, lon);
+  const t1 = sunTimes(new Date(date.getTime() + 86400e3), lat, lon);
+  for (const [k, label] of [["astro","astronomical"], ["nautical","nautical"], ["civil","civil"]]){
+    const dusk = t0[k === "astro" ? "astroDusk" : k === "nautical" ? "nauticalDusk" : "civilDusk"];
+    const dawn = t1[k === "astro" ? "astroDawn" : k === "nautical" ? "nauticalDawn" : "civilDawn"];
+    if (dusk && dawn && +dawn > +dusk) return { from: dusk, to: dawn, kind: label, sun: t0 };
+  }
+  return { from: null, to: null, kind: null, sun: t0 };
+}
+
+async function runSeeing(){
+  const site = AC_SEE.get();
+  const err = m => { $("#seStatus").innerHTML = `<div class="note err"><span>Can't build it</span><div>${m}</div></div>`; $("#seOut").innerHTML = ""; };
+  if (!site) return err("Pick a location. Any airport works as a nearby reference point.");
+
+  const dateStr = $("#seDate").value;
+  if (!dateStr) return err("Pick a night.");
+  const night = new Date(dateStr + "T12:00:00Z");
+
+  const win = seeingNightWindow(night, site.lat, site.lon);
+  if (!win.from) return err(`The Sun never sets far enough at ${site.iata} on that date for a dark window — no astronomical, nautical or civil night exists there tonight.`);
+
+  const prog = (pct, msg) => { $("#seStatus").innerHTML = `<div class="loading"><p>${msg}</p><div class="bar"><i style="width:${pct}%"></i></div></div>`; };
+  prog(10, "Requesting pressure-level winds…");
+
+  const h0 = hourISO(new Date(win.from.getTime() - 3600e3));
+  const h1 = hourISO(new Date(win.to.getTime()   + 3600e3));
+
+  let rec, sfc;
+  try{
+    FETCH_DEADLINE = Date.now() + 45000;
+    [rec] = await fetchModel([{lat:site.lat, lon:site.lon}], "", h0, h1);
+    prog(60, "Requesting cloud and water vapour…");
+    const q = new URLSearchParams({
+      latitude: site.lat.toFixed(4), longitude: site.lon.toFixed(4),
+      hourly: "cloud_cover_low,cloud_cover_mid,cloud_cover_high",
+      start_hour: h0, end_hour: h1,
+      timeformat: "unixtime", timezone: "UTC", cell_selection: "nearest",
+    });
+    sfc = await getJSON(`${OM}?${q}`);
+  }catch(e){
+    return err(`The weather service did not answer (${e.message.slice(0,90)}). It rate-limits per minute — wait a moment and try again.`);
+  }
+  if (!rec || !rec.hourly) return err("The forecast came back empty for that location.");
+
+  /* Hourly walk through the dark window. */
+  const rows = [];
+  for (let t = +win.from; t <= +win.to; t += 3600e3){
+    const when = new Date(t), tSec = t/1000;
+    const levels = profileAt(rec, tSec);
+    const see = levels ? seeingFrom(levels, site.elev*FT) : null;
+    const cl = k => sfc && sfc.hourly ? atTime(sfc.hourly[k], sfc.hourly.time, tSec) : null;
+    const trans = transparency(cl("cloud_cover_low"), cl("cloud_cover_mid"), cl("cloud_cover_high"), null);
+    const mp = moonPhase(toJulian(when));
+    const ma = moonAltAz(when, site.lat, site.lon);
+    rows.push({ when, see, trans, moonAlt: ma.alt, moonAz: ma.az, illum: mp.illum, phase: mp.name });
+  }
+
+  const mt = moonTimes(night, site.lat, site.lon);
+  SEE_LAST = { site, win, rows, moon: { ...moonPhase(toJulian(win.from)), rise: mt.rise, set: mt.set } };
+  $("#seStatus").innerHTML = "";
+  drawSeeing(SEE_LAST);
+  $("#seOut").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block:"start" });
+}
+
+function drawSeeing(S){
+  const host = $("#seOut"); if (!host) return;
+  const tz = S.site.tz;
+  const lt = d => localTime(d, tz);
+  const usable = S.rows.filter(r => r.see);
+  const best = usable.slice().sort((a,b) => a.see.seeingFree - b.see.seeingFree)[0];
+
+  const rows = S.rows.map(r => {
+    const b = r.see ? seeingBand(r.see.seeingFree) : null;
+    return `<tr>
+      <td><div class="cell t">${lt(r.when)}<em>${hhmmUTC(r.when)}</em></div></td>
+      <td><div class="cell">${r.see
+        ? `<span class="pill" style="background:${b.col}">${r.see.seeingFree.toFixed(2)}″ ${b.name}</span>`
+        : `<span class="pill" style="background:var(--panel-3)">no data</span>`}</div></td>
+      <td class="hideS"><div class="cell mono">${r.see ? kt(r.see.bufton) + " kt" : "—"}</div></td>
+      <td><div class="cell">${r.trans
+        ? `<span class="mono">${Math.round(r.trans.score)}%</span> <em style="color:var(--dim-2)">${Math.round(r.trans.blocked)}% cloud</em>`
+        : `<span style="color:var(--dim-2)">unavailable</span>`}</div></td>
+      <td class="hideS"><div class="cell mono">${r.moonAlt > 0
+        ? `${r.moonAlt.toFixed(0)}° · ${Math.round(r.illum*100)}%`
+        : `<span style="color:var(--dim-2)">down</span>`}</div></td>
+    </tr>`;
+  }).join("");
+
+  host.innerHTML = `
+  <section class="panel">
+    <h3>Tonight at ${S.site.iata} — ${S.site.label}</h3>
+    <p class="jl-head">
+      ${best
+        ? `Best free-atmosphere seeing is <b>${best.see.seeingFree.toFixed(2)}″</b> around
+           <b>${lt(best.when)}</b> local — ${seeingBand(best.see.seeingFree).name.toLowerCase()},
+           ${seeingBand(best.see.seeingFree).say}.`
+        : `No usable upper-air profile came back for this site.`}
+      Dark window (${S.win.kind} night) runs <b>${lt(S.win.from)} – ${lt(S.win.to)}</b> local.
+      Moon is <b>${S.moon.name.toLowerCase()}</b>, ${Math.round(S.moon.illum*100)}% lit${
+        S.moon.rise ? `, rising ${lt(S.moon.rise)}` : ""}${S.moon.set ? `, setting ${lt(S.moon.set)}` : ""}.
+    </p>
+    <table class="log">
+      <thead><tr><th>Local</th><th>Seeing (free atmos.)</th><th class="hideS">Jet-slab wind</th>
+        <th>Transparency</th><th class="hideS">Moon alt · lit</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="jl-note">
+      <b>Free-atmosphere seeing only.</b> The ground layer — the first few tens of metres —
+      usually contributes more than the entire atmosphere above it, and it depends on what you
+      are standing on. A rooftop, a car park and a mountain ridge behave completely differently
+      and none of that is resolved by a 25 km model grid. Expect your actual seeing to be
+      <i>worse</i> than the figure above, by an amount that is a property of your site rather
+      than of tonight.
+    </p>
+    <details class="jl-method">
+      <summary>How this is worked out</summary>
+      <p>Seeing and clear-air turbulence are two consequences of the same mechanism, which is
+      why this page shares an engine with the flight briefing. Optical turbulence is described
+      by the refractive-index structure constant Cn², integrated through the column to give the
+      Fried parameter r₀ = (0.423·k²·∫Cn²dh)^(−3/5), from which the seeing disc is
+      0.98·λ/r₀ at λ = 500 nm.</p>
+      <p>Cn²(h) uses the <b>Hufnagel-Valley</b> functional form, but driven by the actual
+      forecast wind rather than HV's fixed climatological profile. The upper term scales with
+      the square of the <b>Bufton wind</b> — the RMS wind speed between 5 and 20 km — computed
+      here from the forecast pressure-level winds. That is what makes it a forecast: when the
+      jet moves overhead, that term rises and the seeing degrades. Each layer is additionally
+      weighted by its local vertical wind shear relative to a reference value, since optical
+      turbulence is generated where the flow shears. That weighting is a bounded heuristic,
+      not a first-principles derivation.</p>
+      <p>Transparency combines the three forecast cloud layers multiplicatively, with high
+      cirrus weighted slightly less per unit coverage than low cloud — thin enough to look
+      clear and still enough to kill contrast. Sun and Moon positions, rise and set times and
+      lunar phase are computed from Meeus's algorithms; no API is involved and no value on
+      this page is cached.</p>
+      <p><b>Worth cross-checking.</b> Compare a few nights against Meteoblue's seeing product
+      before trusting this for anything that matters. Expect broad agreement on which nights
+      are good and disagreement on absolute arcseconds, since their model includes a
+      site-specific ground layer this one deliberately refuses to guess at.</p>
+    </details>
+  </section>`;
+}
+
+function mountSeeing(){
+  if (!$("#seLoc")) return;
+  AC_SEE = makeAC("seLoc", "acSee");
+  const d = new Date();
+  $("#seDate").value = `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  $("#seGo").addEventListener("click", runSeeing);
+  $("#seLoc").addEventListener("keydown", e => {
+    if (e.key === "Enter" && !$("#acSee").classList.contains("on")) runSeeing();
+  });
 }
 /* ══════════ NATIVE BRIDGE (Capacitor) ═══════════════════════════════════ */
 const Native = (() => {
@@ -8284,6 +8819,7 @@ function mountActions(){
 Native.boot();
 mountCalmToggle();
 mountJetlag();
+mountSeeing();
 
 /* A shared link carries the whole query — restore it and run. Last, so every
    module it touches is already wired up. */

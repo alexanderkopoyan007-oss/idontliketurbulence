@@ -264,29 +264,42 @@ let AC_JL_DEP = null, AC_JL_ARR = null;
 /* Two views in one file. The ride briefing stays the default entry point; the
    planner is a sibling, reachable at #/jetlag so it can be linked directly
    without colliding with the query-state hash. */
+const VIEWS = {
+  ride:   { nav:"#vRide", section:null,          hash:"" },
+  jetlag: { nav:"#vJet",  section:"#jetlagView", hash:"#/jetlag" },
+  seeing: { nav:"#vSee",  section:"#seeingView", hash:"#/seeing" },
+};
+
 function showView(which){
-  const jet = which === "jetlag";
-  $("#jetlagView").hidden = !jet;
-  ["#pRoute", "#pFlight"].forEach(s => { const el = $(s); if (el) el.closest(".strip").hidden = jet; });
-  const out = $("#out");     if (out) out.hidden = jet;
-  const fs  = $("#footStatic"); if (fs) fs.hidden = jet;
-  $("#vRide").classList.toggle("on", !jet);
-  $("#vJet").classList.toggle("on", jet);
-  $("#vRide").setAttribute("aria-current", jet ? "false" : "page");
-  $("#vJet").setAttribute("aria-current", jet ? "page" : "false");
+  const view = VIEWS[which] ? which : "ride";
+  const ride = view === "ride";
+  for (const [name, v] of Object.entries(VIEWS)){
+    if (v.section){ const el = $(v.section); if (el) el.hidden = name !== view; }
+    const nav = $(v.nav);
+    if (nav){
+      nav.classList.toggle("on", name === view);
+      nav.setAttribute("aria-current", name === view ? "page" : "false");
+    }
+  }
+  /* The briefing's own strip and output belong to the ride view. */
+  const strip = $("#pRoute") && $("#pRoute").closest(".strip");
+  if (strip) strip.hidden = !ride;
+  const out = $("#out");        if (out) out.hidden = !ride;
+  const fs  = $("#footStatic"); if (fs)  fs.hidden  = !ride;
+}
+
+function goView(which){
+  showView(which);
+  HASH_SELF_WRITE = true;
+  const h = VIEWS[which] ? VIEWS[which].hash : "";
+  history.replaceState(null, "", location.pathname + h);
 }
 
 function mountJetlag(){
   if (!$("#jlDep")) return;
-  $("#vRide").addEventListener("click", () => {
-    showView("ride");
-    if (location.hash === "#/jetlag"){ HASH_SELF_WRITE = true; history.replaceState(null, "", location.pathname); }
-  });
-  $("#vJet").addEventListener("click", () => {
-    showView("jetlag");
-    HASH_SELF_WRITE = true;
-    history.replaceState(null, "", location.pathname + "#/jetlag");
-  });
+  $("#vRide").addEventListener("click", () => goView("ride"));
+  $("#vJet").addEventListener("click",  () => goView("jetlag"));
+  const se = $("#vSee"); if (se) se.addEventListener("click", () => goView("seeing"));
   AC_JL_DEP = makeAC("jlDep", "acJlDep");
   AC_JL_ARR = makeAC("jlArr", "acJlArr");
   const d = new Date(Date.now() + 3*3600e3); d.setMinutes(0,0,0);

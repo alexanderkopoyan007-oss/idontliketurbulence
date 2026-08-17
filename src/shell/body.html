@@ -17,6 +17,7 @@
   <nav class="views" aria-label="Sections">
     <button class="viewt on" id="vRide" aria-current="page">Ride</button>
     <button class="viewt" id="vJet">Jet lag</button>
+    <button class="viewt" id="vSee">Seeing</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -69,6 +70,32 @@
   </div>
   <div id="jlStatus"></div>
   <div id="jlOut"></div>
+</section>
+
+<!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="seeingView" hidden aria-label="Astronomical seeing forecast">
+  <h2 class="jl-title">Seeing forecast</h2>
+  <p class="jl-intro">
+    Astronomical seeing is dominated by turbulence near the jet stream — the same shear this
+    site already computes for aircraft. This points that engine at the ground instead of a
+    flight path and reports tonight's free-atmosphere seeing hour by hour.
+  </p>
+  <div class="fields">
+    <div class="f f-5">
+      <label for="seLoc">Location (nearest airport works)</label>
+      <input id="seLoc" autocomplete="off" spellcheck="false" placeholder="TFN, Tenerife…">
+      <div class="ac" id="acSee"></div>
+    </div>
+    <div class="f f-3">
+      <label for="seDate">Night of</label>
+      <input type="date" id="seDate">
+    </div>
+    <div class="f f-3 f-go">
+      <button class="go" id="seGo">Forecast tonight</button>
+    </div>
+  </div>
+  <div id="seStatus"></div>
+  <div id="seOut"></div>
 </section>
 
 <!-- ── query strip ── -->
