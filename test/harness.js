@@ -29,27 +29,49 @@ function browserStubs(){
                 createElement: () => ({ style:{}, classList:{ add:noop, remove:noop } }),
                 addEventListener: noop },
     window: { addEventListener: noop, matchMedia: () => ({ matches:false }) },
-    navigator: { userAgent: "test" },
-    location: { protocol: "http:", hash: "", origin: "http://localhost" },
+    /* `addEventListener` is a bare global in a browser, not only a method on
+       window — share.js registers a hashchange listener at load. */
+    addEventListener: noop, removeEventListener: noop,
+    history: { replaceState: noop, pushState: noop, length: 1 },
+    navigator: { userAgent: "test", clipboard: { writeText: () => Promise.resolve() } },
+    location: { protocol: "http:", hash: "", origin: "http://localhost",
+                pathname: "/", search: "" },
     fetch: () => Promise.reject(new Error("network disabled in tests")),
     setTimeout, clearTimeout, setInterval, clearInterval,
+    /* Web platform globals, not ECMAScript intrinsics — a fresh vm realm has
+       Math and JSON but not these. */
+    URL, URLSearchParams, TextEncoder, TextDecoder, Intl,
   };
 }
 
 /**
- * @param {string[]} files  paths relative to the repo root, in load order
- * @param {string[]} names  globals to lift out (consts included)
+ * @param {string[]} files    paths relative to the repo root, in load order
+ * @param {string[]} names    globals to lift out (consts included)
+ * @param {object}   [opts]
+ * @param {string[]} [opts.settable]  mutable globals (`let`) the test needs to
+ *   drive — e.g. RES. Assigning to them from the test realm would not work:
+ *   they live in the sandbox's own global lexical scope, so the write has to
+ *   happen inside it. Exposed as `set.<name>(value)`.
  */
-export function load(files, names){
+export function load(files, names, opts = {}){
   const ctx = createContext(browserStubs());
   for (const f of files){
     runInContext(readFileSync(join(ROOT, f), "utf8"), ctx, { filename: f });
   }
   runInContext(
-    `globalThis.__t = { ${names.map(n => `${n}`).join(", ")} };`,
+    `globalThis.__t = { ${names.join(", ")} };`,
     ctx, { filename: "<harness-export>" }
   );
-  return ctx.__t;
+  const out = ctx.__t;
+  const settable = opts.settable || [];
+  if (settable.length){
+    runInContext(
+      `globalThis.__set = { ${settable.map(n => `${n}: v => { ${n} = v; }`).join(", ")} };`,
+      ctx, { filename: "<harness-setters>" }
+    );
+    out.set = ctx.__set;
+  }
+  return out;
 }
 
 /* The physics lives in core.js + engine.js; engine needs core's constants, and

@@ -48,6 +48,7 @@ function mountActions(){
   const host = document.querySelector(".verdict"); if (!host) return;
   const d = document.createElement("div"); d.id = "acts"; d.className = "acts";
   d.innerHTML = `<button class="act" id="actShare">Share briefing</button>
+                 <button class="act" id="actLink">Copy link</button>
                  <button class="act" id="actSave">Save this flight</button>`;
   host.appendChild(d);
   $("#actShare").onclick = () => {
@@ -55,21 +56,28 @@ function mountActions(){
     const w = R.worst;
     Native.share(
       `${R.route.dep.iata} \u2192 ${R.route.arr.iata} \u00b7 ${fmtDur(R.totalMin)} at ${fmtFL(R.route.topFt)}\n` +
-      `Ride score ${R.score}/100 \u2014 ${R.verdict}\n` +
-      (w ? `Roughest: ${hhmmUTC(w.time)}Z ${w.place.text}, ${w.band.name} (EDR ${w.edr.toFixed(2)})\n` : "") +
-      `Forecast confidence ${R.conf}%. Planning aid only \u2014 not an operational product.`,
+      `Ride score ${R.score}/100 \u2014 ${verdictFor(R.felt)[1]}\n` +
+      (w ? `Roughest: ${hhmmUTC(w.time)} ${w.place.text}, ${w.band.name} (EDR ${w.edr.toFixed(2)})\n` : "") +
+      `Forecast confidence ${R.confidence}%. Planning aid only \u2014 not an operational product.\n` +
+      shareURL(),
       `Ride Report \u00b7 ${R.route.dep.iata}\u2192${R.route.arr.iata}`);
   };
+  $("#actLink").onclick = copyShareLink;
   $("#actSave").onclick = async () => {
     const R = RES; if (!R) return;
     const saved = (await Native.recall("saved")) || [];
-    saved.unshift({ dep:R.route.dep.iata, arr:R.route.arr.iata, when:$("#dt").value,
-                    acft:$("#acft").value, scaleKm:+$("#scale").value, at:Date.now() });
+    saved.unshift({ dep:R.route.dep.iata, arr:R.route.arr.iata, when:R.whenLocal || null,
+                    acft:(R.route.opts||{}).acft, scaleKm:+((R.route.opts||{}).scaleKm||90),
+                    hash:shareState(), at:Date.now() });
     await Native.remember("saved", saved.slice(0,12));
     toast("Saved \u2014 it will be waiting next time");
   };
 }
 Native.boot();
+
+/* A shared link carries the whole query — restore it and run. Last, so every
+   module it touches is already wired up. */
+restoreFromHash();
 
 /* service worker, when served over http(s) */
 if ("serviceWorker" in navigator && location.protocol.startsWith("http"))

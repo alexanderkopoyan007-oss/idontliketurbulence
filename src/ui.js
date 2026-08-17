@@ -125,10 +125,14 @@ async function run(dep, arr, whenLocalValue, opts, extra, flightNo){
     const route = buildRoute(dep, arr, when, opts, filed);
     RES = await analyse(route, prog);
     RES.extra = extra || null;
+    RES.flightNo = flightNo || null;        // for the shareable URL
+    RES.whenLocal = whenLocalValue || null;
     prog(100, "Done");
     $("#out").classList.add("on");   // must be visible before anything measures itself
     paint();
     mountActions();
+    writeShareHash();
+    updateShareMeta();
     status("");
     $("#out").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block:"start"});
   }catch(e){

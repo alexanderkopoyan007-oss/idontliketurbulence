@@ -36,7 +36,7 @@ BLOCKS=(
   "src/render.js"
   "src/xsection.js"
   "src/panels.js"
-  "src/ui.js src/native.js"
+  "src/ui.js src/share.js src/native.js"
 )
 
 ALL_FILES=(src/shell/head.html src/styles.css src/shell/body.html src/shell/foot.html)
