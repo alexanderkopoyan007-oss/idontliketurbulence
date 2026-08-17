@@ -14,8 +14,62 @@
       <span>Pre-flight turbulence briefing</span>
     </div>
   </div>
+  <nav class="views" aria-label="Sections">
+    <button class="viewt on" id="vRide" aria-current="page">Ride</button>
+    <button class="viewt" id="vJet">Jet lag</button>
+  </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
+
+<!-- ── jet lag planner ── -->
+<section class="strip jl-strip" id="jetlagView" hidden aria-label="Plan a body-clock adjustment">
+  <h2 class="jl-title">Jet lag planner</h2>
+  <p class="jl-intro">
+    A light-exposure schedule for moving your body clock. The direction matters more than
+    the amount — light at the wrong hour shifts the clock the wrong way, so the timings
+    below are worked out against your own sleep pattern rather than a generic table.
+  </p>
+  <div class="fields">
+    <div class="f f-4">
+      <label for="jlDep">Departure airport</label>
+      <input id="jlDep" autocomplete="off" spellcheck="false" placeholder="LHR, London…">
+      <div class="ac" id="acJlDep"></div>
+    </div>
+    <div class="f f-4">
+      <label for="jlArr">Arrival airport</label>
+      <input id="jlArr" autocomplete="off" spellcheck="false" placeholder="NRT, Tokyo…">
+      <div class="ac" id="acJlArr"></div>
+    </div>
+    <div class="f f-3">
+      <label for="jlDate">Departure (local at origin)</label>
+      <input type="datetime-local" id="jlDate">
+    </div>
+  </div>
+  <div class="fields">
+    <div class="f f-2">
+      <label for="jlBed">Usual bedtime</label>
+      <input id="jlBed" class="mono" value="23:30" inputmode="numeric" placeholder="23:30">
+    </div>
+    <div class="f f-2">
+      <label for="jlWake">Usual wake time</label>
+      <input id="jlWake" class="mono" value="07:00" inputmode="numeric" placeholder="07:00">
+    </div>
+    <div class="f f-3">
+      <label for="jlPrep">Days you can prepare before</label>
+      <select id="jlPrep">
+        <option value="0">None — start on arrival</option>
+        <option value="2">2 days</option>
+        <option value="3" selected>3 days</option>
+        <option value="4">4 days</option>
+      </select>
+    </div>
+    <div class="f f-3 f-go">
+      <button class="go" id="jlGo">Build plan</button>
+    </div>
+  </div>
+  <div id="jlStatus"></div>
+  <div id="jlOut"></div>
+</section>
 
 <!-- ── query strip ── -->
 <section class="strip" aria-label="Build a briefing">

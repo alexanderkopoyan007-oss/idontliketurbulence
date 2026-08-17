@@ -75,6 +75,7 @@ function mountActions(){
 }
 Native.boot();
 mountCalmToggle();
+mountJetlag();
 
 /* A shared link carries the whole query — restore it and run. Last, so every
    module it touches is already wired up. */

@@ -86,6 +86,8 @@ let HASH_SELF_WRITE = false;
 function restoreFromHash(){
   const raw = location.hash.replace(/^#/, "");
   if (!raw) return false;
+  /* Route hashes (#/jetlag) belong to the view router, not the query state. */
+  if (raw.startsWith("/")){ showView(raw.slice(1) === "jetlag" ? "jetlag" : "ride"); return false; }
   const p = new URLSearchParams(raw);
   const flight = p.get("f");
   const route  = p.get("r");
