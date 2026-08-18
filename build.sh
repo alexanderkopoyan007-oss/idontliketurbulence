@@ -38,7 +38,7 @@ BLOCKS=(
   "src/panels.js"
   "src/astro.js"
   "src/seeing.js"
-  "src/window.js src/heatmap.js src/motion.js src/delay.js"
+  "src/window.js src/heatmap.js src/motion.js src/delay.js src/volume.js"
   "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/heatmapview.js src/motionview.js src/delayview.js src/native.js"
 )
 

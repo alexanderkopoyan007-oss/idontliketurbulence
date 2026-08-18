@@ -496,3 +496,13 @@ body.calm #vWord{ color:var(--vellum)!important }
 .dly-conn.comfortable{background:#0F2A2E} .dly-conn.tight{background:#33260F} .dly-conn.risky{background:#3A1420}
 .dly-note{margin:12px 0 0; font-size:12px; line-height:1.6; color:var(--dim-2)}
 .dly-note b{color:var(--amber-2)}
+
+/* ─────────── volumetric view ─────────── */
+.vol-ctl{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-bottom:10px}
+.vol-ctl label{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--dim); cursor:pointer}
+.vol-ctl .sub{margin-left:auto; font:500 11.5px/1 var(--mono); color:var(--dim-2)}
+#volCanvas{width:100%; height:min(62vh,560px); display:block; border-radius:var(--r);
+  border:1px solid var(--rule); background:#070B14; cursor:grab; touch-action:none}
+#volCanvas:active{cursor:grabbing}
+.vol-note{margin:12px 0 0; font-size:12px; line-height:1.6; color:var(--dim-2)}
+.vol-note b{color:var(--amber-2)}

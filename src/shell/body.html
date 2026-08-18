@@ -20,6 +20,7 @@
     <button class="viewt" id="vSee">Seeing</button>
     <button class="viewt" id="vHeat">Best time</button>
     <button class="viewt" id="vRec">Record</button>
+    <button class="viewt" id="vVol">3D</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -75,6 +76,37 @@
 </section>
 
 <!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="volumeView" hidden aria-label="Volumetric atmosphere">
+  <h2 class="jl-title">The air in three dimensions</h2>
+  <p class="jl-intro">
+    A raymarch through the field the briefing already computed — turbulence as volumetric fog
+    on the same EDR colour scale, the jet stream as a 30 m/s isosurface, the tropopause, the
+    terrain below and the flight path threading through it. Drag to orbit, scroll to zoom.
+  </p>
+  <div class="fields">
+    <div class="f f-6 f-go"><button class="go" id="volGo">Render this briefing</button></div>
+  </div>
+  <div id="volStatus"></div>
+  <div id="volWrap" hidden>
+    <div class="vol-ctl">
+      <label><input type="checkbox" id="volJet" checked> Jet isosurface</label>
+      <label><input type="checkbox" id="volTrop" checked> Tropopause</label>
+      <label><input type="checkbox" id="volTerr" checked> Terrain</label>
+      <label><input type="checkbox" id="volFollow"> Orbit</label>
+      <span class="sub" id="volPerf"></span>
+    </div>
+    <canvas id="volCanvas"></canvas>
+    <p class="sub" id="volMeta"></p>
+    <p class="vol-note"><b>The cross-track axis carries no turbulence information.</b>
+      The analysis samples two points either side of track, but spends them on the horizontal
+      wind gradients Ellrod's index needs — it never computes a separate EDR there. So the
+      corridor is drawn as a slab of constant cross-track value: real depth and parallax, no
+      cross-track detail. Along-track and vertical are both genuinely resolved, one column per
+      waypoint across the ten pressure levels. Resolving the third axis means fetching a grid
+      instead of a line, which is a request-count decision rather than a rendering one.</p>
+  </div>
+</section>
+
 <section class="strip jl-strip" id="recordView" hidden aria-label="Record this flight">
   <h2 class="jl-title">Record this flight</h2>
   <p class="jl-intro">

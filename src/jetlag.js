@@ -270,6 +270,7 @@ const VIEWS = {
   seeing: { nav:"#vSee",  section:"#seeingView", hash:"#/seeing" },
   heat:   { nav:"#vHeat", section:"#heatView",   hash:"#/heat" },
   record: { nav:"#vRec",  section:"#recordView", hash:"#/record" },
+  volume: { nav:"#vVol",  section:"#volumeView", hash:"#/3d" },
 };
 
 function showView(which){
@@ -302,6 +303,7 @@ function mountJetlag(){
   $("#vRide").addEventListener("click", () => goView("ride"));
   if ($("#vHeat")) $("#vHeat").addEventListener("click", () => goView("heat"));
   if ($("#vRec"))  $("#vRec").addEventListener("click",  () => goView("record"));
+  if ($("#vVol"))  $("#vVol").addEventListener("click",  () => goView("volume"));
   $("#vJet").addEventListener("click",  () => goView("jetlag"));
   const se = $("#vSee"); if (se) se.addEventListener("click", () => goView("seeing"));
   AC_JL_DEP = makeAC("jlDep", "acJlDep");
