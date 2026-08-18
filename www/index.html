@@ -544,6 +544,11 @@ body.calm #vWord{ color:var(--vellum)!important }
 /* ─────────── area map ─────────── */
 #gmap{width:100%; height:min(58vh,520px); border-radius:var(--r); border:1px solid var(--rule);
   background:#070B14; margin-top:10px}
+
+/* ─────────── live traffic ─────────── */
+.ac-live{position:absolute; left:-9px; top:-9px; width:18px; height:18px; line-height:18px;
+  text-align:center; font-size:15px; color:var(--amber); text-shadow:0 0 5px #000; pointer-events:auto}
+.ac-live.low{color:var(--dim-2); font-size:12px}
 </style>
 </head>
 <body>
@@ -641,8 +646,9 @@ body.calm #vWord{ color:var(--vellum)!important }
       <input type="range" id="gTime" min="0" max="72" step="3" value="0">
     </div>
     <div class="f f-3 f-go"><button class="go" id="gGo">Load this view</button></div>
+    <div class="f f-3 f-go"><button class="go" id="gTrafficBtn">Show live traffic</button></div>
   </div>
-  <p class="sub" id="gCost">pan the map to see the cost</p>
+  <p class="sub"><span id="gCost">pan the map to see the cost</span> <span id="gTraffic" class="mono"></span></p>
   <div id="gStatus"></div>
   <div id="gmap"></div>
   <p class="sub" id="gMeta"></p>
@@ -15022,6 +15028,7 @@ function gStatus(html, cls){
 function mountGlobe(){
   if (!$("#gGo")) return;
   $("#gGo").addEventListener("click", loadArea);
+  const tb = $("#gTrafficBtn"); if (tb) tb.addEventListener("click", toggleTraffic);
   const fl = $("#gFL"), tm = $("#gTime");
   if (fl) fl.addEventListener("input", () => { $("#gFLv").textContent = "FL" + fl.value; redrawArea(); });
   if (tm) tm.addEventListener("input", () => {
@@ -15129,6 +15136,109 @@ function drawAreaRaster(f){
   GLAYER = L.imageOverlay(cv.toDataURL(), bounds, { opacity: 0.78, interactive: false }).addTo(GMAP);
 }
 mountGlobe();
+
+/* ══════════ LIVE TRAFFIC ════════════════════════════════════════════════
+   Aircraft visibly routing around a red patch is the forecast validating itself
+   in public, which is the whole point of putting traffic on this map.
+
+   It needs a server-side hop, because no free ADS-B source sends CORS headers.
+   The Cloudflare Worker was the obvious home for that and does not work — every
+   source refuses Cloudflare's shared egress — so the proxy lives in serve.rb and
+   this works when the site is served locally. On a static host there is no /adsb
+   route, and the UI says so instead of quietly showing an empty sky. */
+
+let TRAFFIC = [], TRAFFIC_LAYERS = [], TRAFFIC_TIMER = 0;
+
+async function fetchTraffic(){
+  if (!GMAP) return null;
+  const c = GMAP.getCenter();
+  const b = GMAP.getBounds();
+  /* radius that covers the view, capped at what the source will serve */
+  const km = Math.min(400, distance({lat:c.lat, lon:c.lng},
+                                    {lat:b.getNorth(), lon:b.getEast()})/1000);
+  const nm = Math.max(20, Math.round(km/1.852));
+  const url = `/adsb?src=adsblol&path=${encodeURIComponent(`v2/lat/${c.lat.toFixed(3)}/lon/${c.lng.toFixed(3)}/dist/${nm}`)}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(r.status === 404 || r.status === 400
+    ? "no proxy on this host" : `proxy said ${r.status}`);
+  const j = await r.json();
+  return (j.ac || []).filter(a => isFinite(a.lat) && isFinite(a.lon));
+}
+
+function drawTraffic(){
+  TRAFFIC_LAYERS.forEach(l => GMAP.removeLayer(l));
+  TRAFFIC_LAYERS = [];
+  for (const a of TRAFFIC){
+    const track = isFinite(a.track) ? a.track : 0;
+    const alt = isFinite(a.alt_baro) ? a.alt_baro : null;
+    /* Dim anything well below cruise: it is climbing or descending and is not
+       the thing this map is about. */
+    const cruising = alt !== null && alt > 20000;
+    const m = L.marker([a.lat, a.lon], {
+      icon: L.divIcon({ className: "", iconSize: [0,0],
+        html: `<div class="ac-live${cruising ? "" : " low"}" style="transform:rotate(${track}deg)">✈</div>` }),
+      zIndexOffset: 800,
+    }).addTo(GMAP);
+    const call = (a.flight || "").trim();
+    m.bindPopup(
+      `<b style="font-family:var(--mono)">${call || a.hex}</b><br>` +
+      (alt !== null ? `${fmtFL(alt)} · ` : "") +
+      (isFinite(a.gs) ? `${Math.round(a.gs)} kt · ` : "") +
+      `track ${Math.round(track)}°<br>` +
+      (call ? `<a href="#" class="ac-brief" data-call="${call}">Briefing for this flight</a>`
+            : `<span style="color:#8DA0B8">no callsign</span>`));
+    TRAFFIC_LAYERS.push(m);
+  }
+  const tag = $("#gTraffic");
+  if (tag) tag.textContent = `${TRAFFIC.length} aircraft`;
+
+  /* Clicking through to a briefing reuses the existing flight-number path. */
+  GMAP.off("popupopen").on("popupopen", e => {
+    const link = e.popup.getElement() && e.popup.getElement().querySelector(".ac-brief");
+    if (!link) return;
+    link.onclick = ev => {
+      ev.preventDefault();
+      const call = link.dataset.call;
+      goView("ride");
+      tab("flight");
+      $("#fnum").value = call;
+      $("#goFlight").click();
+    };
+  });
+}
+
+async function toggleTraffic(){
+  const btn = $("#gTrafficBtn"); if (!btn) return;
+  if (TRAFFIC_TIMER){
+    clearInterval(TRAFFIC_TIMER); TRAFFIC_TIMER = 0;
+    TRAFFIC_LAYERS.forEach(l => GMAP.removeLayer(l)); TRAFFIC_LAYERS = [];
+    TRAFFIC = [];
+    btn.textContent = "Show live traffic";
+    const tag = $("#gTraffic"); if (tag) tag.textContent = "";
+    return;
+  }
+  const load = async () => {
+    try{
+      TRAFFIC = await fetchTraffic();
+      drawTraffic();
+    }catch(e){
+      clearInterval(TRAFFIC_TIMER); TRAFFIC_TIMER = 0;
+      btn.textContent = "Show live traffic";
+      gStatus(e.message === "no proxy on this host"
+        ? `<span>Live traffic needs the local server</span><div>No free ADS-B source sends CORS
+           headers, so this needs a server-side hop. It is built into <span class="mono">serve.rb</span>
+           and works when you run the site with <span class="mono">./start.sh</span>. A static host has
+           no such route — and putting it on Cloudflare does not work either, because every source
+           refuses Cloudflare's shared egress addresses.</div>`
+        : `<span>Traffic unavailable</span><div>${e.message}</div>`, "err");
+    }
+  };
+  ensureGMap();
+  btn.textContent = "Hide live traffic";
+  await load();
+  /* 20 s is polite to a free service and fast enough to watch a deviation. */
+  TRAFFIC_TIMER = setInterval(load, 20000);
+}
 /* ══════════ NATIVE BRIDGE (Capacitor) ═══════════════════════════════════ */
 const Native = (() => {
   const C = window.Capacitor;

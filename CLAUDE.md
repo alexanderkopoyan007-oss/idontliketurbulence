@@ -184,6 +184,23 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
 
+### Live traffic, and where the proxy has to live
+
+No free ADS-B source sends CORS headers, so live traffic needs a server-side hop.
+The Cloudflare Worker was the obvious home and **does not work**: the CORS problem is
+solved, but every source then refuses Cloudflare's shared egress addresses.
+
+| Source | From Cloudflare | From an ordinary machine |
+|---|---|---|
+| OpenSky | 522, timed out after ~20s | 200 in 0.25s |
+| adsb.lol | 429 | 200 in 0.5s |
+| airplanes.live | 403 | 403 (their access policy — email them) |
+
+adsb.lol returns 200 even with an empty User-Agent, so it is not header-sniffing; it is
+purely the source address. The proxy therefore lives in `serve.rb`, which runs on a normal
+residential address. Live traffic works when the site is served locally and says why it does
+not on a static host, rather than showing an empty sky.
+
 ### The area field
 
 The same EDR physics on a grid. Scoped to the **visible view on demand**, not a live global
