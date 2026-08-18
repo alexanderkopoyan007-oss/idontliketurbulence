@@ -6608,7 +6608,16 @@ function buildRoute(dep, arr, depDate, opts, filed){
   /* one resolution knob: the cross-track stencil half-width, in km.
      Along-track spacing is tied to it so the sampled grid stays roughly isotropic. */
   const scaleKm = clamp(+opts.scaleKm || 90, 20, 200);
-  const OFF     = scaleKm * 1000;                 // ± cross-track finite-difference stencil
+  /* Two different knobs that the slider normally moves together:
+       scaleKm    along-track spacing — a cost control
+       stencilKm  cross-track half-width — a *calibration constant*, since the
+                  EDR mapping is fitted at 90 km and Ellrod's index is
+                  scale-dependent
+     The departure heatmap needs coarse spacing for cost but the calibrated
+     stencil for comparability, so it can set them independently. Welding them
+     together made grid scores disagree with the briefings they linked to. */
+  const stencilKm = clamp(+opts.stencilKm || scaleKm, 20, 200);
+  const OFF     = stencilKm * 1000;               // ± cross-track finite-difference stencil
   /* Along-track spacing. Roughly one sample per half the stencil width, with a
      floor high enough that even a short hop gets a real profile rather than a
      handful of points joined by straight lines.
@@ -6656,7 +6665,7 @@ function buildRoute(dep, arr, depDate, opts, filed){
     wp[i].time = new Date(t);
   }
   return { dep, arr, distM, distNM, trk, cruiseFL:Math.round(topFt/100), topFt, tas, wp,
-           climbNM, descNM, scaleKm, offM:OFF, opts,
+           climbNM, descNM, scaleKm, stencilKm, offM:OFF, opts,
            filed: filed || null, gcNM: gcM/NM,
            extraNM: path ? Math.max(0, distNM - gcM/NM) : 0 };
 }
@@ -6870,6 +6879,47 @@ function layerCAT(C, L, R, P, N, dsAlong, dnCross, brg){
   }
   return out;
 }
+
+/* Combine the three turbulence sources on every level of a column.
+
+   Shared between the full analysis and the departure heatmap. Keeping one copy
+   is not tidiness: the heatmap originally used only the nearest layer's CAT
+   value, which ignored mountain wave and convection entirely and reported a slot
+   as the smoothest of the week (93) when the full briefing scored it 42.
+
+   The strongest source dominates, with partial contributions from the others —
+   two mechanisms acting together are worse than either alone, but not additive. */
+function blendColumn(col, mw, cv, gridFL, spread){
+  return col.map((c, k) => {
+    const ft  = c ? c.ft : gridFL[k]*100;
+    const cat = c ? c.edr : 0;
+    const mwt = mw ? mw.edrAt(ft) : 0;
+    const con = cv ? cv.edrAt(ft) : 0;
+    const parts = [cat, mwt, con].sort((a,b)=>b-a);
+    const total = clamp(parts[0] + 0.35*parts[1] + 0.2*parts[2], 0, 1);
+    return { ft, fl: ft/100, cat, mwt, con, edr: total, d: c, spread: (spread && spread[k]) || 0 };
+  });
+}
+
+/* Interpolate a blended column to an actual flight level, then taper the lowest
+   levels where the model's vertical resolution is too coarse to trust. */
+function columnAt(column, ftQuery){
+  const cs = column.filter(c => c.d || c.edr > 0);
+  if (!cs.length) return column[0];
+  let lo = null, hi = null;
+  for (const c of column){
+    if (c.ft <= ftQuery && (!lo || c.ft > lo.ft)) lo = c;
+    if (c.ft >= ftQuery && (!hi || c.ft < hi.ft)) hi = c;
+  }
+  if (lo && hi && hi.ft > lo.ft){
+    const f = (ftQuery-lo.ft)/(hi.ft-lo.ft);
+    return { ...lo, edr: lerp(lo.edr, hi.edr, f), cat: lerp(lo.cat, hi.cat, f),
+             mwt: lerp(lo.mwt, hi.mwt, f), con: lerp(lo.con, hi.con, f),
+             spread: lerp(lo.spread, hi.spread, f), d: (f<0.5?lo.d:hi.d) };
+  }
+  return lo || hi || column[0];
+}
+const lowLevelTaper = altFt => altFt < 8000 ? clamp(0.45 + altFt/16000, 0.45, 1) : 1;
 
 /* Tropopause: the coldest level in the upper troposphere is a good proxy. */
 function tropopause(C){
@@ -7095,7 +7145,13 @@ async function analyse(route, progress){
       const N = i<wp.length-1  ? profileAt(M[(i+1)*3], tSec) : null;
       const dsAlong = (i>0 && i<wp.length-1) ? (wp[i+1].distM - wp[i-1].distM)
                     : i===0 ? (wp[1].distM - wp[0].distM) : (wp[i].distM - wp[i-1].distM);
-      perModel.push({ C, layers: layerCAT(C, L, R, P, N, dsAlong, 180000, w.brg),
+      /* Full cross-track separation of the stencil, from the route that was
+         actually built. This was hardcoded to 180000 m, which is correct only at
+         the default 90 km half-width: at the 20 km end of the slider the sample
+         points sit 40 km apart while the divisor still claimed 180 km, so the
+         finite difference under-reported shear by a factor of 4.5 — the slider
+         quietly corrupted the diagnostic it advertises sharpening. */
+      perModel.push({ C, layers: layerCAT(C, L, R, P, N, dsAlong, route.offM*2, w.brg),
                       trop: tropopause(C), jet: jetCore(C) });
     }
     if (!perModel.length){ w.dead = true; return; }
@@ -7151,31 +7207,9 @@ async function analyse(route, progress){
     const cv = convective(cape, prcp, w.trop && w.trop.ft);
 
     /* combine sources on every level of the column */
-    w.column = col.map((c, k) => {
-      const ft = c ? c.ft : gridFL[k]*100;
-      const cat = c ? c.edr : 0;
-      const mwt = mw.edrAt(ft), con = cv.edrAt(ft);
-      const parts = [cat, mwt, con].sort((a,b)=>b-a);
-      const total = clamp(parts[0] + 0.35*parts[1] + 0.2*parts[2], 0, 1);
-      return { ft, fl: ft/100, cat, mwt, con, edr: total, d: c, spread: spread[k] };
-    });
-
-    /* value at the actual flight level */
-    const at = ftQuery => {
-      const cs = w.column.filter(c => c.d || c.edr > 0);
-      if (!cs.length) return w.column[0];
-      let lo = null, hi = null;
-      for (const c of w.column){ if (c.ft <= ftQuery && (!lo || c.ft > lo.ft)) lo = c; if (c.ft >= ftQuery && (!hi || c.ft < hi.ft)) hi = c; }
-      if (lo && hi && hi.ft > lo.ft){ const f = (ftQuery-lo.ft)/(hi.ft-lo.ft);
-        return { ...lo, edr: lerp(lo.edr, hi.edr, f), cat: lerp(lo.cat, hi.cat, f),
-                 mwt: lerp(lo.mwt, hi.mwt, f), con: lerp(lo.con, hi.con, f),
-                 spread: lerp(lo.spread, hi.spread, f), d: (f<0.5?lo.d:hi.d) };
-      }
-      return lo || hi || w.column[0];
-    };
-    const here = at(w.altFt);
-    /* below ~8000 ft the low-level layers are poorly represented — taper */
-    const lowTaper = w.altFt < 8000 ? clamp(0.45 + w.altFt/16000, 0.45, 1) : 1;
+    w.column = blendColumn(col, mw, cv, gridFL, spread);
+    const here = columnAt(w.column, w.altFt);
+    const lowTaper = lowLevelTaper(w.altFt);
     w.edr  = clamp(here.edr * lowTaper, 0, 1);
     w.cat  = here.cat*lowTaper; w.mwt = here.mwt*lowTaper; w.con = here.con*lowTaper;
     w.spread = here.spread; w.diag = here.d || null;
@@ -8494,8 +8528,23 @@ function auroraAlong(tl, kpSeries){
      - one model (GFS), not two. The grid compares slots against each other, so
        a consistent bias matters far less than it would in an absolute forecast,
        and the saving is a straight halving.
-     - the coarse analysis scale, so 16 waypoints rather than up to 44.
-     - cruise level only. Climb and descent are much the same whenever you go. */
+     - one model, as above.
+
+   What is NOT reduced any further is along-track resolution. A first cut sampled
+   every 199 nm to save requests; that walked straight past a sharp shear band,
+   reporting a peak EDR of 0.20 where the full briefing found 0.77, and since the
+   peak term carries a 74x weight in the score the same departure read 84 on the
+   grid and 42 in the briefing. A grid whose numbers do not mean what the briefing
+   means is worse than no grid, so the spacing now matches the briefing's default
+   and the cost is ~26x one briefing instead of ~13x — still one round of requests
+   against 56 briefings.
+
+   What is NOT reduced is the physics. The first version scored only the nearest
+   layer's clear-air value, which ignored mountain wave and convection: it called
+   a slot the smoothest of the week at 93 when the full briefing scored the same
+   departure 42. The grid now runs the same blendColumn/columnAt the briefing
+   does, which needs CAPE and terrain — CAPE for the week is two variables rather
+   than forty, and terrain is time-invariant so it is fetched once. */
 
 const HEAT_STEP_H = 3;          // one column every three hours
 const HEAT_DAYS   = 7;
@@ -8503,33 +8552,54 @@ const HEAT_DAYS   = 7;
 /* What this will cost, worked out before anything is fetched so the user can
    decide. Open-Meteo meters by variables x locations x hours. */
 function heatmapPlan(dep, arr, opts){
-  const route  = buildRoute(dep, arr, new Date(), { ...opts, scaleKm: 200 }, null);
+  /* Same spacing and same stencil as a default briefing, so a grid score means
+     what a briefing score means. The saving comes from fetching the week once,
+     not from sampling it worse. */
+  const route  = buildRoute(dep, arr, new Date(), { ...opts, scaleKm: 90, stencilKm: 90 }, null);
   const nWpt   = route.wp.length;
   const points = nWpt * 3;                       // centre + both stencil points
   const chunks = Math.ceil(points / 12);         // 12 locations per request
+  const surf   = Math.ceil((nWpt*2) / 20);       // CAPE/precip, 20 locations per request
   const hours  = HEAT_DAYS*24 + 12;
   const slots  = Math.floor(HEAT_DAYS*24 / HEAT_STEP_H);
-  return { route, nWpt, points, requests: chunks, hours, slots,
-           /* a normal briefing is ~4 chunks over ~14 hours */
+  return { route, nWpt, points, requests: chunks + surf + 1, plChunks: chunks,
+           surfChunks: surf, hours, slots,
+           /* a normal briefing is ~4 pressure chunks over ~14 hours; the surface
+              and terrain calls are a rounding error against forty variables */
            relativeCost: (chunks*hours) / (4*14) };
 }
 
 /* Fetch once, across the whole window. */
 async function heatmapFetch(plan, progress){
+  const wp = plan.route.wp;
   const pts = [];
-  plan.route.wp.forEach(w => { pts.push({lat:w.lat, lon:w.lon}); pts.push(w.left); pts.push(w.right); });
+  wp.forEach(w => { pts.push({lat:w.lat, lon:w.lon}); pts.push(w.left); pts.push(w.right); });
   const t0 = new Date(Date.now() - 2*3600e3);
   const t1 = new Date(Date.now() + (HEAT_DAYS*24 + 10)*3600e3);
-  progress && progress(20, `Fetching one week of model data — ${plan.requests} requests…`);
-  const recs = await fetchModel(pts, "gfs_seamless", hourISO(t0), hourISO(t1));
+  const h0 = hourISO(t0), h1 = hourISO(t1);
+
+  progress && progress(18, `Fetching one week of upper-air data — ${plan.plChunks} requests…`);
+  const recs = await fetchModel(pts, "gfs_seamless", h0, h1);
   if (recs.length !== pts.length) throw new Error("The weather service returned an incomplete week. Try again in a minute.");
-  return recs;
+
+  progress && progress(48, "Fetching convective fields for the week…");
+  const surface = await fetchSurface(wp.map(w=>({lat:w.lat,lon:w.lon})).concat(wp.map(w=>w.left)), h0, h1)
+                        .catch(() => null);
+
+  progress && progress(58, "Sampling terrain along the track…");
+  const elev = await fetchTerrain(f => {
+    if (plan.route.filed && plan.route.filed.path) return plan.route.filed.path.at(plan.route.distM * f);
+    return interp(plan.route.dep, plan.route.arr, f);
+  }, 90).catch(() => null);
+
+  return { recs, surface, elev };
 }
 
 /* Evaluate one departure slot against the cached series. Mirrors the cruise-level
    part of analyse(), reusing the same layerCAT physics and the same rideScore, so
    a cell cannot disagree with the briefing it opens. */
-function heatmapSlot(plan, recs, departAt){
+function heatmapSlot(plan, data, departAt){
+  const { recs, surface, elev } = data;
   const route = plan.route, wp = route.wp;
   const tas = route.tas;
   let t = departAt.getTime() + 8*60000;
@@ -8554,18 +8624,34 @@ function heatmapSlot(plan, recs, departAt){
     if (!C){ edrs.push(null); continue; }
     const dsAlong = (i>0 && i<wp.length-1) ? (wp[i+1].distM - wp[i-1].distM)
                   : i===0 ? (wp[1].distM - wp[0].distM) : (wp[i].distM - wp[i-1].distM);
+    /* Full stencil width = 2 x the half-width the route actually used, so the
+       finite difference is divided by the distance it was measured over. */
     const layers = layerCAT(C, L, R,
                             i>0 ? profileAt(recs[(i-1)*3], tSec) : null,
                             i<wp.length-1 ? profileAt(recs[(i+1)*3], tSec) : null,
                             dsAlong, route.offM*2, w.brg);
-    /* the layer nearest this waypoint's altitude */
-    let best = null, bd = Infinity;
-    for (const l of layers){
-      if (!l) continue;
-      const d = Math.abs(l.ft - w.altFt);
-      if (d < bd){ bd = d; best = l; }
+
+    const trop = tropopause(C);
+    const ts = elev ? terrainStats(elev, route.distM, w.frac, 90000) : null;
+    const low = C.find(l => l && l.p >= 700) || C[0];
+    const b = rad(w.brg);
+    const alongWind = low ? (low.u*Math.sin(b) + low.v*Math.cos(b)) : 0;
+    const mw = mountainWave(C, ts, alongWind, trop && trop.ft);
+
+    let cape = 0, prcp = 0;
+    if (surface){
+      for (const r of [surface[i], surface[wp.length+i]].filter(Boolean)){
+        const c = atTime(r.hourly && r.hourly.cape, r.hourly && r.hourly.time, tSec);
+        const p = atTime(r.hourly && r.hourly.precipitation, r.hourly && r.hourly.time, tSec);
+        if (c !== null) cape = Math.max(cape, c);
+        if (p !== null) prcp = Math.max(prcp, p);
+      }
     }
-    edrs.push(best ? best.edr : null);
+    const cv = convective(cape, prcp, trop && trop.ft);
+
+    const column = blendColumn(layers, mw, cv, HEAT_GRID_FL, null);
+    const here = columnAt(column, w.altFt);
+    edrs.push(clamp(here.edr * lowLevelTaper(w.altFt), 0, 1));
   }
 
   const good = edrs.map((e,i) => [e, mins[i]]).filter(([e]) => e !== null);
@@ -8579,9 +8665,13 @@ function heatmapSlot(plan, recs, departAt){
 }
 
 /* The whole grid. */
+/* Mid-layer flight levels, matching the grid analyse() builds. */
+const HEAT_GRID_FL = [];
+for (let k=0;k<LEVELS.length-1;k++) HEAT_GRID_FL.push((LEVELS[k].fl + LEVELS[k+1].fl)/2);
+
 async function buildHeatmap(dep, arr, opts, progress){
   const plan = heatmapPlan(dep, arr, opts);
-  const recs = await heatmapFetch(plan, progress);
+  const data = await heatmapFetch(plan, progress);
   progress && progress(70, "Scoring every departure slot…");
 
   /* Start at the next whole HEAT_STEP_H boundary in the origin's local time, so
@@ -8593,7 +8683,7 @@ async function buildHeatmap(dep, arr, opts, progress){
   for (let k=0;k<plan.slots;k++){
     const depart = new Date(start.getTime() + k*HEAT_STEP_H*3600e3);
     let cell = null;
-    try { cell = heatmapSlot(plan, recs, depart); } catch { cell = null; }
+    try { cell = heatmapSlot(plan, data, depart); } catch { cell = null; }
     if (cell) cells.push(cell);
   }
   if (!cells.length) throw new Error("No departure slot could be scored from the returned data.");
@@ -9866,7 +9956,8 @@ function heatConfirm(plan, dep, arr){
         ${HEAT_DAYS} days. It fetches the week once rather than per slot, so it costs about
         <b>${plan.requests} requests</b> covering ${plan.hours} hours — roughly
         <b>${plan.relativeCost.toFixed(0)}×</b> a single briefing, in place of ${plan.slots} of them.
-        One model and the coarse ${plan.nWpt}-waypoint scale are used to keep it affordable.
+        One model is used instead of two to halve it; the ${plan.nWpt}-waypoint spacing and
+        90 km stencil match a normal briefing, so the scores mean the same thing.
         <div class="hm-acts">
           <button class="act" id="hmYes">Run it</button>
           <button class="act ghost" id="hmNo">Cancel</button>
@@ -9928,9 +10019,8 @@ function drawHeatmap(){
       <thead><tr><th></th>${days.map(k=>`<th>${dayLabel(k)}</th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody></table></div>
     <p class="hm-note">Times are local at ${H.dep.iata}. Click any cell for the full briefing at that
-      departure. Scores come from one model at the coarse scale, so treat them as a ranking between
-      slots rather than a final figure — the briefing you open will be computed properly, with both
-      models, and may differ by a few points.</p>`;
+      departure. Cells use the same spacing, stencil and physics as a briefing, but one model rather
+      than two, so expect a few points of difference — not a different answer.</p>`;
 
   host.querySelectorAll(".hm-cell[data-iso]").forEach(td => {
     const open = () => {

@@ -204,7 +204,13 @@ async function analyse(route, progress){
       const N = i<wp.length-1  ? profileAt(M[(i+1)*3], tSec) : null;
       const dsAlong = (i>0 && i<wp.length-1) ? (wp[i+1].distM - wp[i-1].distM)
                     : i===0 ? (wp[1].distM - wp[0].distM) : (wp[i].distM - wp[i-1].distM);
-      perModel.push({ C, layers: layerCAT(C, L, R, P, N, dsAlong, 180000, w.brg),
+      /* Full cross-track separation of the stencil, from the route that was
+         actually built. This was hardcoded to 180000 m, which is correct only at
+         the default 90 km half-width: at the 20 km end of the slider the sample
+         points sit 40 km apart while the divisor still claimed 180 km, so the
+         finite difference under-reported shear by a factor of 4.5 — the slider
+         quietly corrupted the diagnostic it advertises sharpening. */
+      perModel.push({ C, layers: layerCAT(C, L, R, P, N, dsAlong, route.offM*2, w.brg),
                       trop: tropopause(C), jet: jetCore(C) });
     }
     if (!perModel.length){ w.dead = true; return; }
@@ -260,31 +266,9 @@ async function analyse(route, progress){
     const cv = convective(cape, prcp, w.trop && w.trop.ft);
 
     /* combine sources on every level of the column */
-    w.column = col.map((c, k) => {
-      const ft = c ? c.ft : gridFL[k]*100;
-      const cat = c ? c.edr : 0;
-      const mwt = mw.edrAt(ft), con = cv.edrAt(ft);
-      const parts = [cat, mwt, con].sort((a,b)=>b-a);
-      const total = clamp(parts[0] + 0.35*parts[1] + 0.2*parts[2], 0, 1);
-      return { ft, fl: ft/100, cat, mwt, con, edr: total, d: c, spread: spread[k] };
-    });
-
-    /* value at the actual flight level */
-    const at = ftQuery => {
-      const cs = w.column.filter(c => c.d || c.edr > 0);
-      if (!cs.length) return w.column[0];
-      let lo = null, hi = null;
-      for (const c of w.column){ if (c.ft <= ftQuery && (!lo || c.ft > lo.ft)) lo = c; if (c.ft >= ftQuery && (!hi || c.ft < hi.ft)) hi = c; }
-      if (lo && hi && hi.ft > lo.ft){ const f = (ftQuery-lo.ft)/(hi.ft-lo.ft);
-        return { ...lo, edr: lerp(lo.edr, hi.edr, f), cat: lerp(lo.cat, hi.cat, f),
-                 mwt: lerp(lo.mwt, hi.mwt, f), con: lerp(lo.con, hi.con, f),
-                 spread: lerp(lo.spread, hi.spread, f), d: (f<0.5?lo.d:hi.d) };
-      }
-      return lo || hi || w.column[0];
-    };
-    const here = at(w.altFt);
-    /* below ~8000 ft the low-level layers are poorly represented — taper */
-    const lowTaper = w.altFt < 8000 ? clamp(0.45 + w.altFt/16000, 0.45, 1) : 1;
+    w.column = blendColumn(col, mw, cv, gridFL, spread);
+    const here = columnAt(w.column, w.altFt);
+    const lowTaper = lowLevelTaper(w.altFt);
     w.edr  = clamp(here.edr * lowTaper, 0, 1);
     w.cat  = here.cat*lowTaper; w.mwt = here.mwt*lowTaper; w.con = here.con*lowTaper;
     w.spread = here.spread; w.diag = here.d || null;

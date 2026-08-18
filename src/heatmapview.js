@@ -57,7 +57,8 @@ function heatConfirm(plan, dep, arr){
         ${HEAT_DAYS} days. It fetches the week once rather than per slot, so it costs about
         <b>${plan.requests} requests</b> covering ${plan.hours} hours — roughly
         <b>${plan.relativeCost.toFixed(0)}×</b> a single briefing, in place of ${plan.slots} of them.
-        One model and the coarse ${plan.nWpt}-waypoint scale are used to keep it affordable.
+        One model is used instead of two to halve it; the ${plan.nWpt}-waypoint spacing and
+        90 km stencil match a normal briefing, so the scores mean the same thing.
         <div class="hm-acts">
           <button class="act" id="hmYes">Run it</button>
           <button class="act ghost" id="hmNo">Cancel</button>
@@ -119,9 +120,8 @@ function drawHeatmap(){
       <thead><tr><th></th>${days.map(k=>`<th>${dayLabel(k)}</th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody></table></div>
     <p class="hm-note">Times are local at ${H.dep.iata}. Click any cell for the full briefing at that
-      departure. Scores come from one model at the coarse scale, so treat them as a ranking between
-      slots rather than a final figure — the briefing you open will be computed properly, with both
-      models, and may differ by a few points.</p>`;
+      departure. Cells use the same spacing, stencil and physics as a briefing, but one model rather
+      than two, so expect a few points of difference — not a different answer.</p>`;
 
   host.querySelectorAll(".hm-cell[data-iso]").forEach(td => {
     const open = () => {

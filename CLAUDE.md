@@ -182,9 +182,25 @@ departure time, only the moment at which you sample them.** So the week is fetch
 a coarse waypoint set and every slot walks that same cached series with different timings —
 about 13x one briefing instead of 56x, in a single round of requests.
 
-Three reductions, all stated in the UI rather than hidden: one model, the coarse 16-waypoint
-scale, and cruise level only. The grid ranks slots against each other, so a consistent bias
-matters much less than it would in an absolute forecast.
+**Only one thing is reduced: the model count.** One model instead of two halves the cost, and
+a consistent bias matters far less when ranking slots against each other. Spacing, stencil and
+physics all match a normal briefing.
+
+That was learned the hard way. Cutting resolution as well looked like free savings and was not:
+sampling every 199 nm walked past a sharp shear band, reporting a peak EDR of 0.20 where the
+briefing found 0.77. Since the peak term carries a 74x weight, the same departure read 84 on the
+grid and 42 in the briefing. A grid whose numbers do not mean what the briefing means is worse
+than no grid. At matched resolution the same slot reads 45 against the briefing's 42.
+
+Two other bugs surfaced on the way, both worth keeping in mind:
+- The first cut scored only the nearest layer's clear-air value, ignoring mountain wave and
+  convection entirely. That is why `blendColumn`/`columnAt` are shared out of engine.js.
+- `analyse()` divided its cross-track finite difference by a hardcoded 180 km whatever the
+  slider said. That is right only at the default 90 km half-width; at the 20 km end the sample
+  points sit 40 km apart while the divisor still claimed 180, under-reporting shear by 4.5x.
+  The analysis-scale slider was quietly corrupting the diagnostic it advertises sharpening.
+  `stencilKm` is now separate from `scaleKm`: spacing is a cost knob, stencil width is a
+  calibration constant.
 
 `rideScore()` lives in core.js and is shared with `analyse()` on purpose. A cell that says
 82 has to mean the same thing as the briefing it opens; two copies of that formula would

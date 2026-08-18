@@ -155,7 +155,16 @@ function buildRoute(dep, arr, depDate, opts, filed){
   /* one resolution knob: the cross-track stencil half-width, in km.
      Along-track spacing is tied to it so the sampled grid stays roughly isotropic. */
   const scaleKm = clamp(+opts.scaleKm || 90, 20, 200);
-  const OFF     = scaleKm * 1000;                 // ± cross-track finite-difference stencil
+  /* Two different knobs that the slider normally moves together:
+       scaleKm    along-track spacing — a cost control
+       stencilKm  cross-track half-width — a *calibration constant*, since the
+                  EDR mapping is fitted at 90 km and Ellrod's index is
+                  scale-dependent
+     The departure heatmap needs coarse spacing for cost but the calibrated
+     stencil for comparability, so it can set them independently. Welding them
+     together made grid scores disagree with the briefings they linked to. */
+  const stencilKm = clamp(+opts.stencilKm || scaleKm, 20, 200);
+  const OFF     = stencilKm * 1000;               // ± cross-track finite-difference stencil
   /* Along-track spacing. Roughly one sample per half the stencil width, with a
      floor high enough that even a short hop gets a real profile rather than a
      handful of points joined by straight lines.
@@ -203,7 +212,7 @@ function buildRoute(dep, arr, depDate, opts, filed){
     wp[i].time = new Date(t);
   }
   return { dep, arr, distM, distNM, trk, cruiseFL:Math.round(topFt/100), topFt, tas, wp,
-           climbNM, descNM, scaleKm, offM:OFF, opts,
+           climbNM, descNM, scaleKm, stencilKm, offM:OFF, opts,
            filed: filed || null, gcNM: gcM/NM,
            extraNM: path ? Math.max(0, distNM - gcM/NM) : 0 };
 }
@@ -417,6 +426,47 @@ function layerCAT(C, L, R, P, N, dsAlong, dnCross, brg){
   }
   return out;
 }
+
+/* Combine the three turbulence sources on every level of a column.
+
+   Shared between the full analysis and the departure heatmap. Keeping one copy
+   is not tidiness: the heatmap originally used only the nearest layer's CAT
+   value, which ignored mountain wave and convection entirely and reported a slot
+   as the smoothest of the week (93) when the full briefing scored it 42.
+
+   The strongest source dominates, with partial contributions from the others —
+   two mechanisms acting together are worse than either alone, but not additive. */
+function blendColumn(col, mw, cv, gridFL, spread){
+  return col.map((c, k) => {
+    const ft  = c ? c.ft : gridFL[k]*100;
+    const cat = c ? c.edr : 0;
+    const mwt = mw ? mw.edrAt(ft) : 0;
+    const con = cv ? cv.edrAt(ft) : 0;
+    const parts = [cat, mwt, con].sort((a,b)=>b-a);
+    const total = clamp(parts[0] + 0.35*parts[1] + 0.2*parts[2], 0, 1);
+    return { ft, fl: ft/100, cat, mwt, con, edr: total, d: c, spread: (spread && spread[k]) || 0 };
+  });
+}
+
+/* Interpolate a blended column to an actual flight level, then taper the lowest
+   levels where the model's vertical resolution is too coarse to trust. */
+function columnAt(column, ftQuery){
+  const cs = column.filter(c => c.d || c.edr > 0);
+  if (!cs.length) return column[0];
+  let lo = null, hi = null;
+  for (const c of column){
+    if (c.ft <= ftQuery && (!lo || c.ft > lo.ft)) lo = c;
+    if (c.ft >= ftQuery && (!hi || c.ft < hi.ft)) hi = c;
+  }
+  if (lo && hi && hi.ft > lo.ft){
+    const f = (ftQuery-lo.ft)/(hi.ft-lo.ft);
+    return { ...lo, edr: lerp(lo.edr, hi.edr, f), cat: lerp(lo.cat, hi.cat, f),
+             mwt: lerp(lo.mwt, hi.mwt, f), con: lerp(lo.con, hi.con, f),
+             spread: lerp(lo.spread, hi.spread, f), d: (f<0.5?lo.d:hi.d) };
+  }
+  return lo || hi || column[0];
+}
+const lowLevelTaper = altFt => altFt < 8000 ? clamp(0.45 + altFt/16000, 0.45, 1) : 1;
 
 /* Tropopause: the coldest level in the upper troposphere is a good proxy. */
 function tropopause(C){
