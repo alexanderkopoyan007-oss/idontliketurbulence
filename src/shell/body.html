@@ -19,6 +19,7 @@
     <button class="viewt" id="vJet">Jet lag</button>
     <button class="viewt" id="vSee">Seeing</button>
     <button class="viewt" id="vHeat">Best time</button>
+    <button class="viewt" id="vRec">Record</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -74,6 +75,24 @@
 </section>
 
 <!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="recordView" hidden aria-label="Record this flight">
+  <h2 class="jl-title">Record this flight</h2>
+  <p class="jl-intro">
+    Lay the phone flat on the tray table and start. It samples the accelerometer, fits the
+    Kolmogorov &minus;5/3 slope to each ten-second window, and keeps a relative roughness index.
+    Windows where the phone was picked up, tapped or walked past are discarded rather than scored.
+    Everything stays on this device.
+  </p>
+  <div class="fields">
+    <div class="f f-6 f-go">
+      <button class="go" id="recStart">Start recording</button>
+      <button class="go" id="recStop" hidden>Stop</button>
+    </div>
+  </div>
+  <div id="recStatus"></div>
+  <div id="recOut"></div>
+</section>
+
 <section class="strip jl-strip" id="heatView" hidden aria-label="Departure-time heatmap">
   <h2 class="jl-title">Best time to fly</h2>
   <p class="jl-intro">

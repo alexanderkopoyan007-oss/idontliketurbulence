@@ -38,8 +38,8 @@ BLOCKS=(
   "src/panels.js"
   "src/astro.js"
   "src/seeing.js"
-  "src/window.js src/heatmap.js"
-  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/heatmapview.js src/native.js"
+  "src/window.js src/heatmap.js src/motion.js"
+  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/heatmapview.js src/motionview.js src/native.js"
 )
 
 ALL_FILES=(src/shell/head.html src/styles.css src/shell/body.html src/shell/foot.html)

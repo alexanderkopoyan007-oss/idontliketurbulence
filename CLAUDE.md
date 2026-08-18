@@ -58,6 +58,8 @@ src/
   windowview.js       the window timeline panel, synced to the ride scrubber
   heatmap.js          departure-time grid: one week fetched once, re-sampled per slot
   heatmapview.js      the grid, its cost estimate and click-through
+  motion.js           FFT, Welch PSD, -5/3 slope fit, window quality gates
+  motionview.js       the recorder: permissions, wake lock, binning, local store
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -173,6 +175,31 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 - **Model grid ≈ 25 km.** The eddies that actually move an aircraft are metres to hundreds
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
+
+### The in-cabin recorder
+
+Estimates roughness from the phone's accelerometer by fitting Kolmogorov's -5/3 slope over
+0.3-8 Hz, the standard approach for in-situ EDR from aircraft accelerometers. Validated
+against synthetic signals: the fit recovers -5/3 from a generated Kolmogorov spectrum, and
+-1/-2/-3 from those, so it is fitting rather than pattern-matching. White noise scores low
+on Kolmogorov confidence even when loud.
+
+**It reports an index, never an EDR, and the UI says so at length.** A phone on a tray table
+measures the cabin's response: between the eddies outside and the glass under your palm sit
+the wing, the fuselage, the seat rails and the tray hinge, an unknown transfer function that
+differs by aircraft type and seat position. Converting back to atmospheric EDR needs that
+response. We do not have it and must not guess it.
+
+Quality gates discard rather than down-weight, because a contaminated sample is worse than a
+missing one: gravity-direction change catches pickups, crest factor catches taps, a narrow
+1.4-2.6 Hz peak catches footsteps. The amplitude gate sits at 1.5 g — a first cut used 0.6 g
+and silently threw away a synthetic severe window as "handled", which would have discarded
+precisely the observations the feature exists to collect.
+
+Phones sample near 60 Hz against the 100 Hz-plus of aircraft instrumentation. The fit band
+stops at 8 Hz, well under the ~30 Hz Nyquist, but energy above Nyquist aliases down into the
+band rather than vanishing — one more reason the level is indicative and the slope is the
+informative part.
 
 ### The departure heatmap
 

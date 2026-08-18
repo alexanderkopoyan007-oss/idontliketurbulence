@@ -506,6 +506,13 @@ body.calm #vWord{ color:var(--vellum)!important }
 .hm-note{margin:12px 0 0; font-size:12px; line-height:1.55; color:var(--dim-2)}
 .hm-acts{display:flex; gap:8px; margin-top:10px}
 .act.ghost{background:transparent; border:1px solid var(--rule-2); color:var(--dim)}
+
+/* ─────────── flight recorder ─────────── */
+.rec-spark{display:flex; align-items:flex-end; gap:2px; height:80px; margin:14px 0;
+  padding:8px; background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r-s)}
+.rec-spark i{flex:1 1 auto; min-width:2px; border-radius:1px 1px 0 0; display:block}
+.rec-note{margin:10px 0 0; font-size:12px; line-height:1.6; color:var(--dim-2)}
+.rec-note b{color:var(--amber-2)}
 </style>
 </head>
 <body>
@@ -528,6 +535,7 @@ body.calm #vWord{ color:var(--vellum)!important }
     <button class="viewt" id="vJet">Jet lag</button>
     <button class="viewt" id="vSee">Seeing</button>
     <button class="viewt" id="vHeat">Best time</button>
+    <button class="viewt" id="vRec">Record</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -583,6 +591,24 @@ body.calm #vWord{ color:var(--vellum)!important }
 </section>
 
 <!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="recordView" hidden aria-label="Record this flight">
+  <h2 class="jl-title">Record this flight</h2>
+  <p class="jl-intro">
+    Lay the phone flat on the tray table and start. It samples the accelerometer, fits the
+    Kolmogorov &minus;5/3 slope to each ten-second window, and keeps a relative roughness index.
+    Windows where the phone was picked up, tapped or walked past are discarded rather than scored.
+    Everything stays on this device.
+  </p>
+  <div class="fields">
+    <div class="f f-6 f-go">
+      <button class="go" id="recStart">Start recording</button>
+      <button class="go" id="recStop" hidden>Stop</button>
+    </div>
+  </div>
+  <div id="recStatus"></div>
+  <div id="recOut"></div>
+</section>
+
 <section class="strip jl-strip" id="heatView" hidden aria-label="Departure-time heatmap">
   <h2 class="jl-title">Best time to fly</h2>
   <p class="jl-intro">
@@ -8691,6 +8717,211 @@ async function buildHeatmap(dep, arr, opts, progress){
            best: cells.reduce((a,c) => c.score > a.score ? c : a, cells[0]),
            worst: cells.reduce((a,c) => c.score < a.score ? c : a, cells[0]) };
 }
+"use strict";
+/* ══════════ IN-CABIN MOTION ═════════════════════════════════════════════
+   Estimating turbulence from the phone in your hand, honestly.
+
+   The physics: in the inertial subrange of a turbulent flow the velocity
+   spectrum follows Kolmogorov's -5/3 law, and the acceleration a rigid body
+   experiences inherits a spectral slope from it. Fitting that slope over a band
+   where the law should hold is the standard way in-situ EDR is estimated from
+   aircraft accelerometers (Cornman et al., 1995), and the fit quality doubles as
+   a check that we are looking at turbulence rather than at somebody's footsteps.
+
+   WHAT THIS CANNOT BE. A phone on a tray table measures the CABIN's response,
+   not the atmosphere. Between the eddies outside and the glass under your palm
+   sit the wing, the fuselage, the seat rails and the tray hinge — an unknown
+   transfer function that differs by aircraft type, by loading, and by where in
+   the cabin you are sitting. Converting that back to an atmospheric EDR would
+   require the aircraft's frequency response, which we do not have and cannot
+   guess. So this module reports a RELATIVE index and says so everywhere. It is
+   comparable between flights only in the loose sense that a 60 is rougher than
+   a 20; it is not an EDR and must never be labelled as one.
+
+   Sampling. Phones deliver DeviceMotion at roughly 60 Hz, some at 100. Nyquist
+   is therefore ~30 Hz, and the fit band stops well below it. Energy above
+   Nyquist aliases down into the band rather than disappearing, which is one more
+   reason the absolute level is untrustworthy while the slope is informative. */
+
+const MOTION_HZ_MIN = 0.30;    // below this, aircraft manoeuvring dominates
+const MOTION_HZ_MAX = 8.0;     // above this, phone/tray resonances take over
+const MOTION_BIN_S  = 10;      // one observation per ten seconds
+
+/* ─── FFT: iterative radix-2, in place, real input via complex arrays ─── */
+function fftRadix2(re, im){
+  const n = re.length;
+  if (n & (n-1)) throw new Error("fft: length must be a power of two");
+  for (let i=1, j=0; i<n; i++){
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; }
+  }
+  for (let len=2; len<=n; len<<=1){
+    const ang = -2*Math.PI/len;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i=0; i<n; i+=len){
+      let cr = 1, ci = 0;
+      for (let k=0; k<len/2; k++){
+        const ur = re[i+k],        ui = im[i+k];
+        const vr = re[i+k+len/2]*cr - im[i+k+len/2]*ci;
+        const vi = re[i+k+len/2]*ci + im[i+k+len/2]*cr;
+        re[i+k]        = ur+vr; im[i+k]        = ui+vi;
+        re[i+k+len/2]  = ur-vr; im[i+k+len/2]  = ui-vi;
+        const ncr = cr*wr - ci*wi;
+        ci = cr*wi + ci*wr; cr = ncr;
+      }
+    }
+  }
+}
+
+const hann = n => Array.from({length:n}, (_,i) => 0.5*(1 - Math.cos(2*Math.PI*i/(n-1))));
+
+/* Welch's method: overlapping Hann-windowed segments, periodograms averaged.
+   Returns one-sided PSD in units²/Hz against frequency in Hz. */
+function welchPSD(samples, fs, segLen){
+  const n = samples.length;
+  let L = segLen || 1 << Math.floor(Math.log2(Math.max(16, n/4)));
+  while (L > n) L >>= 1;
+  if (L < 16) return null;
+  const step = L >> 1;                       // 50% overlap
+  const win = hann(L);
+  const winPow = win.reduce((s,w) => s + w*w, 0);
+  const bins = L>>1;
+  const acc = new Float64Array(bins);
+  let segs = 0;
+
+  for (let start=0; start + L <= n; start += step){
+    let mean = 0;
+    for (let i=0;i<L;i++) mean += samples[start+i];
+    mean /= L;
+    const re = new Float64Array(L), im = new Float64Array(L);
+    for (let i=0;i<L;i++) re[i] = (samples[start+i]-mean)*win[i];
+    fftRadix2(re, im);
+    for (let k=1;k<bins;k++) acc[k] += (re[k]*re[k] + im[k]*im[k]);
+    segs++;
+  }
+  if (!segs) return null;
+  const freq = new Float64Array(bins), psd = new Float64Array(bins);
+  const norm = 2/(fs*winPow*segs);           // one-sided, window-compensated
+  for (let k=1;k<bins;k++){ freq[k] = k*fs/L; psd[k] = acc[k]*norm; }
+  return { freq, psd, bins, segs, segLen: L };
+}
+
+/* Least-squares slope of log10(PSD) against log10(f) across the fit band.
+   Kolmogorov gives -5/3 for the velocity spectrum; the acceleration spectrum a
+   body sees in that subrange carries the same power-law character, so a slope
+   near -5/3 is the signature we are looking for. Returns the slope, the
+   coefficient of determination, and the number of bins used. */
+function spectralSlope(freq, psd, fLo, fHi){
+  const xs = [], ys = [];
+  for (let k=0;k<freq.length;k++){
+    const f = freq[k];
+    if (f < fLo || f > fHi) continue;
+    if (!(psd[k] > 0)) continue;
+    xs.push(Math.log10(f)); ys.push(Math.log10(psd[k]));
+  }
+  const n = xs.length;
+  if (n < 6) return { slope:null, r2:0, n };
+  const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0, sxx=0, syy=0;
+  for (let i=0;i<n;i++){ const dx=xs[i]-mx, dy=ys[i]-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy; }
+  if (sxx === 0) return { slope:null, r2:0, n };
+  const slope = sxy/sxx;
+  const r2 = syy === 0 ? 0 : (sxy*sxy)/(sxx*syy);
+  return { slope, r2, n, intercept: my - slope*mx };
+}
+
+/* Band-limited RMS acceleration — the amplitude half of the picture, in m/s².
+   Integrating the PSD over the band is Parseval's theorem and is far more
+   robust than a raw time-domain RMS, which would be dominated by whatever
+   low-frequency drift the phone's sensor fusion is doing. */
+function bandRMS(freq, psd, fLo, fHi){
+  let sum = 0, df = freq[1] - freq[0];
+  for (let k=0;k<freq.length;k++){
+    if (freq[k] < fLo || freq[k] > fHi) continue;
+    sum += psd[k]*df;
+  }
+  return Math.sqrt(Math.max(0, sum));
+}
+
+/* Was the phone being held, tapped or picked up during this window?
+
+   These are the dominant false positives and none of them look like turbulence:
+   a pickup is a large low-frequency excursion plus a change in which way gravity
+   points; a tap is a broadband impulse; walking is a strong 1.5-2.5 Hz peak.
+   Windows that fail any of these are discarded rather than down-weighted,
+   because a contaminated sample is worse than a missing one. */
+function windowQuality(w){
+  const { az, gx, gy, gz, fs } = w;
+  const reasons = [];
+
+  /* 1. gravity direction must stay put — a flat phone reads ~9.81 on one axis */
+  if (gx && gx.length){
+    const tilt = gx.map((_,i) => Math.atan2(Math.hypot(gx[i], gy[i]), Math.abs(gz[i])));
+    const tMin = Math.min(...tilt), tMax = Math.max(...tilt);
+    if (deg(tMax - tMin) > 12) reasons.push("moved");
+  }
+  /* 2. Excursions beyond anything the air can do. Severe turbulence genuinely
+     reaches about +/-1 g in the cabin, so this gate sits at 1.5 g: set any lower
+     and the filter throws away precisely the observations worth having. A first
+     cut used 0.6 g and silently discarded a synthetic severe window as
+     "handled". Picking the phone up is caught by the tilt test above, and
+     tapping by the crest factor below — neither needs a low amplitude gate. */
+  const peak = Math.max(...az.map(Math.abs));
+  if (peak > 15) reasons.push("handled");
+  /* 3. crest factor catches taps: an impulse has a high peak against its RMS */
+  const rms = Math.sqrt(az.reduce((s,v)=>s+v*v,0)/az.length);
+  if (rms > 0 && peak/rms > 9) reasons.push("tapped");
+  /* 4. a strong narrow peak in the walking band is footsteps, not weather */
+  const p = welchPSD(az, fs);
+  if (p){
+    const walk = bandRMS(p.freq, p.psd, 1.4, 2.6);
+    const wide = bandRMS(p.freq, p.psd, MOTION_HZ_MIN, MOTION_HZ_MAX);
+    if (wide > 0 && walk/wide > 0.72) reasons.push("footsteps");
+  }
+  return { ok: reasons.length === 0, reasons, rms, peak };
+}
+
+/* Turn one window of vertical acceleration into an observation.
+
+   The index is deliberately NOT an EDR. It is a log-scaled map of band-limited
+   RMS cabin acceleration onto 0-100, anchored so that the values a passenger
+   would call smooth, noticeable and rough land near 10, 40 and 70. The anchors
+   come from the amplitude ranges quoted for cabin response in the literature,
+   not from a calibration against this app's forecast — calibrating the
+   observation against the thing it is meant to check would defeat the point. */
+const MOTION_ANCHOR_LO = 0.02;   // m/s² band-limited RMS: imperceptible
+const MOTION_ANCHOR_HI = 2.0;    // m/s²: firmly rough
+
+function motionIndex(rms){
+  if (!(rms > 0)) return 0;
+  const t = (Math.log10(rms) - Math.log10(MOTION_ANCHOR_LO)) /
+            (Math.log10(MOTION_ANCHOR_HI) - Math.log10(MOTION_ANCHOR_LO));
+  return Math.round(clamp(t, 0, 1) * 100);
+}
+
+function analyseWindow(w){
+  const q = windowQuality(w);
+  if (!q.ok) return { ok:false, reasons:q.reasons };
+  const p = welchPSD(w.az, w.fs);
+  if (!p) return { ok:false, reasons:["too short"] };
+  const nyq = w.fs/2;
+  const fHi = Math.min(MOTION_HZ_MAX, nyq*0.8);
+  const s = spectralSlope(p.freq, p.psd, MOTION_HZ_MIN, fHi);
+  const rms = bandRMS(p.freq, p.psd, MOTION_HZ_MIN, fHi);
+  /* How well the band actually follows a power law. A clean -5/3 with a good
+     fit is turbulence; a flat or erratic spectrum is something else, and the
+     UI shows this rather than hiding it. */
+  const kolm = s.slope === null ? 0
+             : clamp(1 - Math.abs(s.slope - (-5/3))/1.5, 0, 1) * s.r2;
+  return {
+    ok: true, fs: w.fs, n: w.az.length,
+    slope: s.slope, r2: s.r2, bins: s.n,
+    rms, index: motionIndex(rms), kolmogorov: kolm,
+    nyquist: nyq, fitHi: fHi,
+  };
+}
 </script>
 <script>
 "use strict";
@@ -9520,6 +9751,7 @@ const VIEWS = {
   jetlag: { nav:"#vJet",  section:"#jetlagView", hash:"#/jetlag" },
   seeing: { nav:"#vSee",  section:"#seeingView", hash:"#/seeing" },
   heat:   { nav:"#vHeat", section:"#heatView",   hash:"#/heat" },
+  record: { nav:"#vRec",  section:"#recordView", hash:"#/record" },
 };
 
 function showView(which){
@@ -9551,6 +9783,7 @@ function mountJetlag(){
   if (!$("#jlDep")) return;
   $("#vRide").addEventListener("click", () => goView("ride"));
   if ($("#vHeat")) $("#vHeat").addEventListener("click", () => goView("heat"));
+  if ($("#vRec"))  $("#vRec").addEventListener("click",  () => goView("record"));
   $("#vJet").addEventListener("click",  () => goView("jetlag"));
   const se = $("#vSee"); if (se) se.addEventListener("click", () => goView("seeing"));
   AC_JL_DEP = makeAC("jlDep", "acJlDep");
@@ -10042,6 +10275,246 @@ function drawHeatmap(){
 }
 
 mountHeatmap();
+"use strict";
+/* ══════════ RECORD THIS FLIGHT ══════════════════════════════════════════
+   The passenger-side recorder. Phone flat on the tray table, screen off, one
+   observation per ten seconds.
+
+   Local only. Nothing leaves the device: there is no upload, no account and no
+   device id. A backend would need somewhere to put it, which is a deployment
+   decision rather than a code one, and the prompt this was built from is
+   explicit that the physics comes first. The export button hands you the JSON so
+   the data is yours either way. */
+
+const REC = {
+  on: false, wake: null, bins: [], buf: [], t0: 0, fsEst: 0,
+  lastPos: null, posWatch: null, listener: null, lastBinAt: 0,
+};
+
+/* Coarse position only — 0.1 degrees is roughly 11 km, enough to place an
+   observation against a forecast grid box and not enough to place a person. */
+const coarse = v => Math.round(v*10)/10;
+
+function motionSupported(){
+  return typeof DeviceMotionEvent !== "undefined" && typeof window.addEventListener === "function";
+}
+function needsPermission(){
+  return typeof DeviceMotionEvent !== "undefined" &&
+         typeof DeviceMotionEvent.requestPermission === "function";
+}
+
+/* iOS 13+ requires this from inside a user gesture, and it can only be asked
+   once per page load — a denial sticks until reload, so say so rather than
+   letting the button look broken. */
+async function askMotionPermission(){
+  if (!needsPermission()) return "granted";
+  try{
+    const r = await DeviceMotionEvent.requestPermission();
+    return r;                                   // "granted" | "denied"
+  }catch(e){
+    return "error";
+  }
+}
+
+async function acquireWakeLock(){
+  try{
+    if ("wakeLock" in navigator){
+      const w = await navigator.wakeLock.request("screen");
+      w.addEventListener("release", () => { if (REC.on) recStatus(); });
+      return w;
+    }
+  }catch{ /* denied or unsupported */ }
+  return null;
+}
+
+function recStatus(msg, cls){
+  const el = $("#recStatus"); if (!el) return;
+  if (msg){ el.innerHTML = `<div class="note ${cls||""}">${msg}</div>`; return; }
+  const wl = REC.wake ? "screen kept awake" :
+    ("wakeLock" in navigator ? "screen lock not granted — keep the screen on, or the browser will suspend sampling"
+                             : "this browser has no wake lock — keep the screen on, or sampling pauses");
+  el.innerHTML = `<div class="note"><span>Recording</span><div>
+    ${REC.bins.length} observation${REC.bins.length===1?"":"s"} ·
+    ${REC.fsEst ? REC.fsEst.toFixed(0)+" Hz" : "measuring rate…"} · ${wl}</div></div>`;
+}
+
+function onMotion(e){
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  const g = e.accelerationIncludingGravity;
+  if (!a) return;
+  const now = performance.now();
+  REC.buf.push({ t: now, x:a.x||0, y:a.y||0, z:a.z||0,
+                 gx:(g&&g.x)||0, gy:(g&&g.y)||0, gz:(g&&g.z)||0 });
+
+  if (now - REC.lastBinAt < MOTION_BIN_S*1000) return;
+  REC.lastBinAt = now;
+  flushBin();
+}
+
+/* Turn the buffer into one observation. The vertical channel is the axis
+   gravity is on — the phone lies flat, so that is z, but we take the component
+   along the measured gravity vector rather than assuming, which survives the
+   phone being face-down or propped at a slight angle. */
+function flushBin(){
+  const b = REC.buf;
+  REC.buf = [];
+  if (b.length < 32) return;
+
+  const span = (b[b.length-1].t - b[0].t)/1000;
+  if (span <= 0) return;
+  const fs = b.length/span;
+  REC.fsEst = fs;
+
+  /* project acceleration onto the gravity direction, then remove the DC term */
+  const gm = b.map(s => Math.hypot(s.gx, s.gy, s.gz) || 1);
+  const az = b.map((s,i) => (s.x*s.gx + s.y*s.gy + s.z*s.gz)/gm[i]);
+  const mean = az.reduce((x,y)=>x+y,0)/az.length;
+  const acc = az.map(v => v - mean);
+
+  /* Welch needs a power-of-two segment; pad the tail off rather than resample,
+     since resampling would smear the spectrum we are trying to measure. */
+  const res = analyseWindow({
+    az: acc, gx: b.map(s=>s.gx), gy: b.map(s=>s.gy), gz: b.map(s=>s.gz), fs
+  });
+
+  const rec = {
+    t: Date.now(), fs: Math.round(fs*10)/10,
+    lat: REC.lastPos ? coarse(REC.lastPos.lat) : null,
+    lon: REC.lastPos ? coarse(REC.lastPos.lon) : null,
+    alt: REC.lastPos && REC.lastPos.alt != null ? Math.round(REC.lastPos.alt) : null,
+  };
+  if (res.ok){
+    Object.assign(rec, { index: res.index, slope: res.slope === null ? null : +res.slope.toFixed(2),
+                         r2: +res.r2.toFixed(2), kolm: +res.kolmogorov.toFixed(2),
+                         rms: +res.rms.toFixed(4) });
+  } else {
+    rec.rejected = res.reasons;
+  }
+  REC.bins.push(rec);
+  saveBins();
+  recStatus();
+  drawRecordings();
+}
+
+function saveBins(){
+  try { localStorage.setItem("rideReportMotion", JSON.stringify(REC.bins.slice(-2000))); }
+  catch { /* quota or private mode — the in-memory copy still works */ }
+}
+function loadBins(){
+  try { REC.bins = JSON.parse(localStorage.getItem("rideReportMotion") || "[]"); }
+  catch { REC.bins = []; }
+}
+
+async function startRecording(){
+  if (!motionSupported()) return recStatus(
+    "<span>Not available</span><div>This browser does not expose DeviceMotion, so there is nothing to sample.</div>", "err");
+
+  const perm = await askMotionPermission();
+  if (perm === "denied") return recStatus(
+    `<span>Permission denied</span><div>Motion access was refused. iOS only asks once per page load —
+     reload the page to be asked again, or enable Motion &amp; Orientation Access in
+     Settings → Safari.</div>`, "err");
+  if (perm === "error") return recStatus(
+    "<span>Could not ask</span><div>The permission request failed. It must be triggered by a tap; try the button again.</div>", "err");
+
+  REC.wake = await acquireWakeLock();
+  REC.on = true; REC.buf = []; REC.t0 = Date.now(); REC.lastBinAt = performance.now();
+  REC.listener = onMotion;
+  addEventListener("devicemotion", REC.listener);
+
+  if (navigator.geolocation){
+    REC.posWatch = navigator.geolocation.watchPosition(
+      p => { REC.lastPos = { lat:p.coords.latitude, lon:p.coords.longitude, alt:p.coords.altitude }; },
+      () => { REC.lastPos = null; },
+      { enableHighAccuracy:false, maximumAge:60000, timeout:20000 });
+  }
+
+  $("#recStart").hidden = true; $("#recStop").hidden = false;
+  recStatus();
+}
+
+async function stopRecording(){
+  REC.on = false;
+  if (REC.listener) removeEventListener("devicemotion", REC.listener);
+  REC.listener = null;
+  if (REC.posWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(REC.posWatch);
+  REC.posWatch = null;
+  if (REC.wake){ try { await REC.wake.release(); } catch {} REC.wake = null; }
+  flushBin();
+  $("#recStart").hidden = false; $("#recStop").hidden = true;
+  recStatus(`<span>Stopped</span><div>${REC.bins.length} observations held on this device.</div>`);
+  drawRecordings();
+}
+
+function drawRecordings(){
+  const host = $("#recOut"); if (!host) return;
+  const good = REC.bins.filter(b => b.index !== undefined);
+  if (!REC.bins.length){
+    host.innerHTML = `<p class="sub">No observations yet. Lay the phone flat on the tray table and start —
+      it samples for ten seconds at a time and discards anything that looks like being picked up.</p>`;
+    return;
+  }
+  const idx = good.map(b => b.index);
+  const worst = good.reduce((a,b) => b.index > a.index ? b : a, good[0] || {index:0});
+  const rejected = REC.bins.length - good.length;
+  const turb = good.filter(b => b.kolm >= 0.4).length;
+
+  const spark = good.slice(-90).map(b => {
+    const h = clamp(b.index, 0, 100);
+    return `<i style="height:${Math.max(3,h)}%;background:${rampCol(h/100*0.6)}" title="${b.index}"></i>`;
+  }).join("");
+
+  host.innerHTML = `
+    <div class="win-sum">
+      <div><span>Observations</span><u>${good.length} kept, ${rejected} discarded</u></div>
+      <div><span>Roughest</span><u>index ${worst.index || 0}${worst.slope!=null?` · slope ${worst.slope}`:""}</u></div>
+      <div><span>Median index</span><u>${idx.length ? idx.slice().sort((a,b)=>a-b)[Math.floor(idx.length/2)] : "—"}</u></div>
+      <div><span>Turbulence-shaped</span><u>${turb} of ${good.length}</u></div>
+    </div>
+    <div class="rec-spark">${spark}</div>
+    <p class="rec-note"><b>This is not an EDR.</b> A phone on a tray table measures the cabin's
+      response, not the atmosphere: between the eddies outside and the glass under your palm sit the
+      wing, the fuselage, the seat rails and the tray hinge — a transfer function that differs by
+      aircraft type and by where you are sitting. Converting back to an atmospheric EDR needs that
+      response, which this app does not have and will not guess. The number is a relative index:
+      a 60 is rougher than a 20, and that is all it claims.</p>
+    <p class="rec-note">Phones sample near ${REC.fsEst ? REC.fsEst.toFixed(0) : "60"} Hz against the
+      100 Hz-plus of aircraft instrumentation, so the fit band stops at 8 Hz, well under Nyquist.
+      Energy above Nyquist aliases down into the band rather than vanishing, which is a further
+      reason the level is indicative and the <em>slope</em> is the informative part: a spectrum near
+      −5/3 is turbulence, a flat one is something else.</p>
+    <div class="hm-acts">
+      <button class="act" id="recExport">Export JSON</button>
+      <button class="act ghost" id="recClear">Clear</button>
+    </div>`;
+
+  $("#recExport").onclick = () => {
+    const blob = new Blob([JSON.stringify({ recorded: REC.bins }, null, 1)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `ride-report-motion-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  $("#recClear").onclick = () => {
+    REC.bins = []; saveBins(); drawRecordings();
+    recStatus("<span>Cleared</span><div>All observations removed from this device.</div>");
+  };
+}
+
+function mountRecorder(){
+  if (!$("#recStart")) return;
+  loadBins();
+  $("#recStart").addEventListener("click", startRecording);
+  $("#recStop").addEventListener("click", stopRecording);
+  if (!motionSupported()){
+    recStatus(`<span>No motion sensor</span><div>This browser or device does not expose DeviceMotion.
+      The recorder needs a phone; everything else on the site works here.</div>`, "err");
+    $("#recStart").disabled = true;
+  }
+  drawRecordings();
+}
+mountRecorder();
 /* ══════════ NATIVE BRIDGE (Capacitor) ═══════════════════════════════════ */
 const Native = (() => {
   const C = window.Capacitor;

@@ -472,3 +472,10 @@ body.calm #vWord{ color:var(--vellum)!important }
 .hm-note{margin:12px 0 0; font-size:12px; line-height:1.55; color:var(--dim-2)}
 .hm-acts{display:flex; gap:8px; margin-top:10px}
 .act.ghost{background:transparent; border:1px solid var(--rule-2); color:var(--dim)}
+
+/* ─────────── flight recorder ─────────── */
+.rec-spark{display:flex; align-items:flex-end; gap:2px; height:80px; margin:14px 0;
+  padding:8px; background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r-s)}
+.rec-spark i{flex:1 1 auto; min-width:2px; border-radius:1px 1px 0 0; display:block}
+.rec-note{margin:10px 0 0; font-size:12px; line-height:1.6; color:var(--dim-2)}
+.rec-note b{color:var(--amber-2)}
