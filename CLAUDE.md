@@ -385,7 +385,7 @@ variables × locations × hours. This is the single biggest constraint on anythi
 
 | Piece | Where | URL |
 |---|---|---|
-| the site | Cloudflare Pages, project `turbulence` | https://turbulence-brw.pages.dev |
+| the site | Cloudflare Pages, project `idontliketurbulence` | https://idontliketurbulence.pages.dev |
 | the API | Cloudflare Worker `ride-report-obs` + D1 | https://ride-report-obs.alexander-kopoyan007-721.workers.dev |
 
 `./deploy.sh` builds and publishes the site; `./deploy.sh --api` also redeploys the Worker.

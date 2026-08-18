@@ -20,4 +20,4 @@ if [ "${1:-}" = "--api" ]; then
 fi
 
 echo "→ deploying the site"
-npx wrangler pages deploy www --project-name=turbulence --commit-dirty=true
+npx wrangler pages deploy www --project-name=idontliketurbulence --commit-dirty=true
