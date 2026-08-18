@@ -2,16 +2,21 @@ name = "ride-report-obs"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
-# Create the database first, then paste its id here:
-#   wrangler d1 create ride-report
 [[d1_databases]]
 binding = "DB"
 database_name = "ride-report"
-database_id = "PASTE_DATABASE_ID_HERE"
+database_id = "75124d10-d312-4f2f-8741-6a23c419a03a"
 
 [vars]
-# Salt for the rate-limit bucket hash. Change it. It is what stops the bucket
-# key being reversible to an address by anyone who guesses the scheme.
-SALT = "change-me-before-deploying"
-# The ADS-B CORS proxy is off by default: it spends third-party quota.
+# The ADS-B CORS proxy is off by default: it spends third-party quota under
+# your account name, so enabling it should be a deliberate act.
 ENABLE_PROXY = "0"
+
+# SALT is deliberately NOT set here. A secret in a tracked file leaks the moment
+# the repo is shared, and this salt is the only thing stopping the rate-limit
+# bucket hash being reversible to an IP address. Set it as a Worker secret:
+#
+#   npx wrangler secret put SALT
+#
+# The Worker falls back to a fixed string when it is unset. That still runs, but
+# the anonymity is weaker, so set it.

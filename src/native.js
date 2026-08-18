@@ -60,7 +60,7 @@ function mountActions(){
       (w ? `Roughest: ${hhmmUTC(w.time)} ${w.place.text}, ${w.band.name} (EDR ${w.edr.toFixed(2)})\n` : "") +
       `Forecast confidence ${R.confidence}%. Planning aid only \u2014 not an operational product.\n` +
       shareURL(),
-      `Ride Report \u00b7 ${R.route.dep.iata}\u2192${R.route.arr.iata}`);
+      `I dont like turbulence \u00b7 ${R.route.dep.iata}\u2192${R.route.arr.iata}`);
   };
   $("#actLink").onclick = copyShareLink;
   $("#actSave").onclick = async () => {

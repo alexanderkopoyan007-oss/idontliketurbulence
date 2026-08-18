@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Ride Report — turbulence forecast for your flight</title>
+<title>I dont like turbulence — turbulence forecast for your flight</title>
 <meta name="description" content="Forecast the turbulence on a flight before you fly. Enter a route or flight number for a segment-by-segment ride briefing with map, flight levels and vertical cross-section.">
 <meta name="theme-color" content="#070B14">
 <link rel="canonical" href="">
@@ -11,19 +11,19 @@
      from the actual result once a briefing is built; per-URL previews for
      script-blind scrapers would need a server or a prerender step. -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Ride Report">
-<meta property="og:title" content="Ride Report — turbulence forecast for your flight">
+<meta property="og:site_name" content="I dont like turbulence">
+<meta property="og:title" content="I dont like turbulence — turbulence forecast for your flight">
 <meta property="og:description" content="A segment-by-segment turbulence briefing for a specific flight, built before you fly, from raw numerical weather prediction output.">
 <meta property="og:image" content="icon-512.png">
 <meta property="og:url" content="">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Ride Report — turbulence forecast for your flight">
+<meta name="twitter:title" content="I dont like turbulence — turbulence forecast for your flight">
 <meta name="twitter:description" content="A segment-by-segment turbulence briefing for a specific flight, built before you fly.">
 <meta name="twitter:image" content="icon-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ride Report">
+<meta name="apple-mobile-web-app-title" content="Turbulence">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -557,7 +557,7 @@ body.calm #vWord{ color:var(--vellum)!important }
       <path d="M16.6 3.2 20 11l8.4 3.4c.6.2.6 1.1 0 1.3L20 19l-1.2 2.7c-1.1-1.1-2.2-1.7-3.4-1.7-1.9 0-3.3 1.4-4.9 3l-.6-.6L13 15l-4.6 1.6-1.7 2.6-1.5-.5 1.4-4.4-2-4.2 1.5-.6 2.3 2.1L13 9.9l-2.8-6.6.7-.6c1.6 1.6 3 3 4.9 3 .3 0 .6 0 .8-.1Z" fill="#FFB03A"/>
     </svg>
     <div>
-      <b>Ride Report</b>
+      <b>I dont like turbulence</b>
       <span>Pre-flight turbulence briefing</span>
     </div>
   </div>
@@ -945,7 +945,7 @@ body.calm #vWord{ color:var(--vellum)!important }
 
 <p class="foot" id="footStatic">
   <b>Read this as a planning aid, not an operational product.</b>
-  Ride Report is built from public numerical weather model data and standard clear-air-turbulence diagnostics.
+  I dont like turbulence is built from public numerical weather model data and standard clear-air-turbulence diagnostics.
   It is not a flight-planning tool, it is not certified for aviation use, and it has no access to your actual filed route,
   assigned flight levels, or the dispatcher's turbulence forecast. Crews get better data than this. If a captain says sit down, sit down.
 </p>
@@ -13640,7 +13640,7 @@ function updateShareMeta(){
     (R.roughMin >= 3 ? `About ${Math.round(R.roughMin)} min light or above. ` : "Smooth for essentially all of it. ") +
     `Forecast confidence ${R.confidence}%.`;
 
-  document.title = `${summary} · Ride Report`;
+  document.title = `${summary} · I dont like turbulence`;
   setMeta('meta[property="og:title"]',       "content", summary);
   setMeta('meta[property="og:description"]', "content", detail);
   setMeta('meta[name="twitter:title"]',       "content", summary);
@@ -15191,7 +15191,7 @@ function mountActions(){
       (w ? `Roughest: ${hhmmUTC(w.time)} ${w.place.text}, ${w.band.name} (EDR ${w.edr.toFixed(2)})\n` : "") +
       `Forecast confidence ${R.confidence}%. Planning aid only \u2014 not an operational product.\n` +
       shareURL(),
-      `Ride Report \u00b7 ${R.route.dep.iata}\u2192${R.route.arr.iata}`);
+      `I dont like turbulence \u00b7 ${R.route.dep.iata}\u2192${R.route.arr.iata}`);
   };
   $("#actLink").onclick = copyShareLink;
   $("#actSave").onclick = async () => {

@@ -57,7 +57,7 @@ function updateShareMeta(){
     (R.roughMin >= 3 ? `About ${Math.round(R.roughMin)} min light or above. ` : "Smooth for essentially all of it. ") +
     `Forecast confidence ${R.confidence}%.`;
 
-  document.title = `${summary} · Ride Report`;
+  document.title = `${summary} · I dont like turbulence`;
   setMeta('meta[property="og:title"]',       "content", summary);
   setMeta('meta[property="og:description"]', "content", detail);
   setMeta('meta[name="twitter:title"]',       "content", summary);
