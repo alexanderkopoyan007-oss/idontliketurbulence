@@ -60,6 +60,9 @@ src/
   heatmapview.js      the grid, its cost estimate and click-through
   motion.js           FFT, Welch PSD, -5/3 slope fit, window quality gates
   motionview.js       the recorder: permissions, wake lock, binning, local store
+  data/runways.js     longest runway heading per airport, 3,597 rows (OurAirports)
+  delay.js            delay heuristic: crosswind, visibility, convection, wind delta
+  delayview.js        the delay panel and the local prediction log
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -175,6 +178,31 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 - **Model grid ≈ 25 km.** The eddies that actually move an aircraft are metres to hundreds
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
+
+### Delay and connection risk
+
+**A physically-motivated heuristic, not a trained model**, and the UI says so. There is no
+labelled historical dataset behind it: every weight is a judgement about what a hazard tends
+to cost, not a fitted coefficient. Predictions are logged to localStorage so the thing can be
+checked against reality later — without that there is no path from "guess" to anything better.
+
+**Aircraft rotation is missing and it is the strongest signal.** Whether the jet operating
+your flight is already late inbound beats any weather field, and most consumer tools ignore
+it. It is not reachable from a static page. Measured directly:
+
+| Source | Cross-origin result |
+|---|---|
+| OpenSky | 200, but `access-control-allow-origin: https://opensky-network.org` — browsers on other origins refused |
+| adsb.lol | 200, no CORS header at all |
+| airplanes.live | 403 |
+
+All three work server-side. None from a page. The same finding blocks live traffic on any
+map view. A proxy fixes it and is a hosting decision, not a code one.
+
+Crosswind is computed against the longest runway, since the runway in use is unknowable and
+the longest is both the most-used and bidirectional (the component is taken as a magnitude).
+Headings are normalised at parse time, not trusted from the table — a source value of 359.7
+rounds to 360 in the data build, and 360 is not a heading.
 
 ### The in-cabin recorder
 

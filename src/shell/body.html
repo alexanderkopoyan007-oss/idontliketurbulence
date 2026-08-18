@@ -277,6 +277,19 @@
     </section>
   </div>
 
+  <section class="card" id="delayCard" style="margin-top:16px">
+    <header><h3>Delay &amp; connection risk</h3><span class="tag">Heuristic, not a model</span></header>
+    <div class="pad">
+      <div class="fields" style="margin-bottom:4px">
+        <div class="f f-4">
+          <label for="connMin">Connection time at arrival (minutes, optional)</label>
+          <input type="number" id="connMin" min="0" max="600" step="5" placeholder="e.g. 75">
+        </div>
+      </div>
+      <div id="delayOut"></div>
+    </div>
+  </section>
+
   <section class="card" id="winCard" style="margin-top:16px">
     <header><h3>Out the window</h3><span class="tag">Tap a row to jump the scrubber</span></header>
     <div class="pad" id="winOut"></div>

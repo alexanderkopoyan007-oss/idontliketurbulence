@@ -129,10 +129,12 @@ async function run(dep, arr, whenLocalValue, opts, extra, flightNo){
     RES.whenLocal = whenLocalValue || null;
     prog(96, "Working out what is out of the window…");
     WIN = await buildWindow(RES).catch(() => null);
+    try { RES.delay = delayEstimate(RES, +($("#connMin")||{}).value || 0); } catch(e){ RES.delay = null; }
     prog(100, "Done");
     $("#out").classList.add("on");   // must be visible before anything measures itself
     paint();
     mountActions();
+    logDelayPrediction();
     writeShareHash();
     updateShareMeta();
     status("");
@@ -174,7 +176,7 @@ function paint(){
   $("#tapeB").textContent = `${fmtDur(R.totalMin)} en route`;
   $("#tapeC2").innerHTML = `${rt.arr.iata} <b>${hhmmUTC(R.live[R.live.length-1].time)}</b>`;
 
-  drawTape(); drawMap(); drawXS(); drawLog(); drawWindow(); drawBlocks(); drawMethod();
+  drawTape(); drawMap(); drawXS(); drawLog(); drawDelay(); drawWindow(); drawBlocks(); drawMethod();
   setCursor(0);
   $("#foot").innerHTML = `Built ${new Date().toISOString().slice(0,16).replace("T"," ")}Z from ${R.models.join(" + ")}. ` +
     `Peak EDR ${R.peak.toFixed(2)} at ${hhmmUTC(R.worst.time)} · ${R.worst.place.text}. Refresh closer to departure — beyond a day or two, turbulence forecasts move around a lot.`;

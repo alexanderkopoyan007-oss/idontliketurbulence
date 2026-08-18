@@ -262,6 +262,20 @@ async function analyse(route, progress){
       }
       const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
       cLow = avg(cl); cMid = avg(cm); cHigh = avg(ch);
+
+      /* Surface wind and visibility at this waypoint. Only the two endpoints are
+         used (by the delay estimate, against the runway heading), but keeping it
+         per-waypoint costs nothing and the fetch already carries the fields. */
+      const r0 = surface[i];
+      if (r0 && r0.hourly){
+        const H = r0.hourly, T = H.time;
+        w.surfaceWx = {
+          windMs:  atTime(H.wind_speed_10m, T, tSec),
+          windDir: atTime(H.wind_direction_10m, T, tSec),
+          vis:     atTime(H.visibility, T, tSec),
+          cape, precip: prcp, cloudLow: cLow,
+        };
+      }
     }
     const cv = convective(cape, prcp, w.trop && w.trop.ft);
 
