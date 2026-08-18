@@ -63,6 +63,11 @@ src/
   data/runways.js     longest runway heading per airport, 3,597 rows (OurAirports)
   delay.js            delay heuristic: crosswind, visibility, convection, wind delta
   delayview.js        the delay panel and the local prediction log
+  volume.js           WebGL2 raymarch of the route's computed field
+  globe.js            the same EDR physics on a grid, for an area rather than a route
+  globeview.js        the area map, raster overlay, altitude and time scrubbers
+server/               Cloudflare Worker + D1 schema for the observation network
+                      (deploy-ready, not deployed — needs an account)
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -178,6 +183,25 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 - **Model grid ≈ 25 km.** The eddies that actually move an aircraft are metres to hundreds
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
+
+### The area field
+
+The same EDR physics on a grid. Scoped to the **visible view on demand**, not a live global
+field, because a global grid is not affordable on the free tier — a 32-point route already
+brushes the per-minute limit. The cost is shown before anything is fetched and the grid is
+capped at 240 points so one view stays one round trip.
+
+One thing gets *cheaper* on a grid. Along a route the engine spends two extra samples per
+waypoint on the cross-track stencil Ellrod's deformation term needs; on a regular grid those
+neighbours already exist, so the gradients come free. Edge cells have no neighbour on one
+side and are left null rather than one-sided-differenced into a misleading value.
+
+Only four levels are fetched (400/300/250/200 hPa, ~FL235-FL385) and the altitude scrubber is
+clamped to that range rather than pretending to cover FL180-FL450 with data that does not
+reach.
+
+Live traffic is absent for the same CORS reason as aircraft rotation — see below. The Worker
+in `server/` carries the proxy that unblocks both.
 
 ### Delay and connection risk
 

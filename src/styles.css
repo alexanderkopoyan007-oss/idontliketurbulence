@@ -506,3 +506,7 @@ body.calm #vWord{ color:var(--vellum)!important }
 #volCanvas:active{cursor:grabbing}
 .vol-note{margin:12px 0 0; font-size:12px; line-height:1.6; color:var(--dim-2)}
 .vol-note b{color:var(--amber-2)}
+
+/* ─────────── area map ─────────── */
+#gmap{width:100%; height:min(58vh,520px); border-radius:var(--r); border:1px solid var(--rule);
+  background:#070B14; margin-top:10px}

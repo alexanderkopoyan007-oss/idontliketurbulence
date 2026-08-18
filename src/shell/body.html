@@ -21,6 +21,7 @@
     <button class="viewt" id="vHeat">Best time</button>
     <button class="viewt" id="vRec">Record</button>
     <button class="viewt" id="vVol">3D</button>
+    <button class="viewt" id="vArea">Area</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -76,6 +77,38 @@
 </section>
 
 <!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="areaView" hidden aria-label="Area turbulence field">
+  <h2 class="jl-title">Turbulence across an area</h2>
+  <p class="jl-intro">
+    The same physics on a grid instead of along a route. Pan and zoom to the area you care
+    about, then load it — the field is fetched for the visible view on demand, because a live
+    global grid is not affordable on a free API tier and pretending otherwise would just fail.
+  </p>
+  <div class="fields">
+    <div class="f f-4">
+      <label for="gFL">Flight level <b id="gFLv">FL340</b></label>
+      <input type="range" id="gFL" min="240" max="380" step="10" value="340">
+    </div>
+    <div class="f f-4">
+      <label for="gTime">Time <b id="gTimev">now</b></label>
+      <input type="range" id="gTime" min="0" max="72" step="3" value="0">
+    </div>
+    <div class="f f-3 f-go"><button class="go" id="gGo">Load this view</button></div>
+  </div>
+  <p class="sub" id="gCost">pan the map to see the cost</p>
+  <div id="gStatus"></div>
+  <div id="gmap"></div>
+  <p class="sub" id="gMeta"></p>
+  <p class="vol-note"><b>Live traffic is not here, and cannot be from a static page.</b>
+    Aircraft visibly routing around a red patch would be the forecast validating itself in
+    public, and it is the feature this view most wants. Every free ADS-B source refuses browser
+    origins: OpenSky answers other origins with a restrictive
+    <span class="mono">access-control-allow-origin</span>, adsb.lol sends no CORS header, and
+    airplanes.live returns 403. All three work from a server. The Worker in
+    <span class="mono">server/</span> carries the proxy route that unblocks this — it is a
+    deployment away, not a code change.</p>
+</section>
+
 <section class="strip jl-strip" id="volumeView" hidden aria-label="Volumetric atmosphere">
   <h2 class="jl-title">The air in three dimensions</h2>
   <p class="jl-intro">
