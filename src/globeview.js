@@ -170,10 +170,13 @@ async function fetchTraffic(){
                                     {lat:b.getNorth(), lon:b.getEast()})/1000);
   const nm = Math.max(20, Math.round(km/1.852));
   const url = `${trafficBase()}/adsb?src=adsblol&path=${encodeURIComponent(`v2/lat/${c.lat.toFixed(3)}/lon/${c.lng.toFixed(3)}/dist/${nm}`)}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(r.status === 404 || r.status === 400
-    ? "no proxy on this host" : `proxy said ${r.status}`);
-  const j = await r.json();
+  const r = await fetch(url).catch(() => { throw new Error("no proxy on this host"); });
+  /* A static host answers an unknown path with index.html and a 200, not a 404,
+     so status alone cannot tell us whether a proxy is there. Content type can:
+     HTML means we reached the site, not a proxy. */
+  const ct = (r.headers.get("content-type") || "").toLowerCase();
+  if (!r.ok || !ct.includes("json")) throw new Error("no proxy on this host");
+  const j = await r.json().catch(() => { throw new Error("no proxy on this host"); });
   return (j.ac || []).filter(a => isFinite(a.lat) && isFinite(a.lon));
 }
 

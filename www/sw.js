@@ -2,7 +2,7 @@
    forecast is worse than no forecast, so network failures surface as errors. */
 /* Bump on every change to index.html: the fetch handler is cache-first for
    same-origin requests, so a stale shell would otherwise be served forever. */
-const SHELL = "ride-shell-3a3bf648b4d8";
+const SHELL = "ride-shell-3f4c46965589";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
