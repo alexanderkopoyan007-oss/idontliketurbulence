@@ -381,6 +381,22 @@ variables × locations × hours. This is the single biggest constraint on anythi
   rendering work**, not after. Server-side caching of forecast fields is fine (they are
   valid for hours); caching a route briefing is not (see hard rule 2).
 
+## Deployment
+
+| Piece | Where | URL |
+|---|---|---|
+| the site | Cloudflare Pages, project `turbulence` | https://turbulence-brw.pages.dev |
+| the API | Cloudflare Worker `ride-report-obs` + D1 | https://ride-report-obs.alexander-kopoyan007-721.workers.dev |
+
+`./deploy.sh` builds and publishes the site; `./deploy.sh --api` also redeploys the Worker.
+The API is kept on a separate cadence because the site changes far more often than the
+endpoint does.
+
+**Live traffic does not work on the deployed site.** The ADS-B proxy lives in `serve.rb`,
+which only runs locally — see the table above for why it cannot live on Cloudflare. The area
+map states this rather than showing an empty sky. Putting the proxy on a host with an
+ordinary address (Fly.io, Render) would fix it.
+
 ## Commands
 
 ```bash
