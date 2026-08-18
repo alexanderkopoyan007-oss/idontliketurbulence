@@ -156,6 +156,7 @@ async function getVerification(env, origin){
    normal address, or leave live traffic out. Disabled by default accordingly. */
 const PROXY_HOSTS = {
   opensky: "https://opensky-network.org/api/",
+  adsbfi:  "https://opendata.adsb.fi/api/",
   adsblol: "https://api.adsb.lol/",
   planeslive: "https://api.airplanes.live/",
 };
@@ -166,7 +167,7 @@ async function proxy(request, env, url, origin){
   const base  = PROXY_HOSTS[which];
   if (!base) return json({ error: "unknown source" }, 400, origin);
   if (path.includes("..")) return json({ error: "bad path" }, 400, origin);
-  const upstream = await fetch(base + path.replace(/^\/+/, ""), { headers: { accept: "application/json" } });
+  const upstream = await fetch(base + path.replace(/^\/+/, ""), { headers: { accept: "application/json", "user-agent": "IDontLikeTurbulence/1.0 (personal, non-commercial)" } });
   const text = await upstream.text();
   return new Response(text, { status: upstream.status,
     headers: { "content-type": "application/json", "cache-control": "public, max-age=20", ...CORS(origin) } });

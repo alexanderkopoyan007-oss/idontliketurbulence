@@ -11,4 +11,11 @@ fi
 # Catch a server started by an earlier run whose pid file is gone.
 pkill -f "$DIR/serve.rb" 2>/dev/null && stopped=1
 
+# and the tunnel, if one was opened
+if [ -f "$DIR/.tunnel.pid" ]; then
+  kill "$(cat "$DIR/.tunnel.pid")" 2>/dev/null && stopped=1
+  rm -f "$DIR/.tunnel.pid"
+fi
+pkill -f "cloudflared tunnel --url http://localhost" 2>/dev/null && stopped=1
+
 [ "$stopped" = 1 ] && echo "Stopped." || echo "Not running."

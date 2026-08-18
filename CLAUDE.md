@@ -186,6 +186,24 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 
 ### Live traffic, and where the proxy has to live
 
+Three things are true at once, and together they determine the design:
+
+1. No free ADS-B source sends CORS headers, so a browser cannot call one directly.
+2. Every source refuses Cloudflare's egress, so the Worker cannot proxy it either.
+   OpenSky 522s, adsb.lol 429s, adsb.fi returns a challenge page, airplanes.live 403s.
+   A descriptive User-Agent changes nothing — adsb.lol serves an empty UA happily from
+   an ordinary address. It is the IP. Public CORS relays fail for the same reason.
+3. An HTTPS page cannot reach `http://localhost` at all.
+
+So the proxy runs in `serve.rb` on an ordinary residential address, and a Cloudflare
+Tunnel gives it a public HTTPS front door. The outbound request still leaves from this
+machine, which is what the ADS-B services are happy to serve.
+
+The tunnel address changes each run, so the app stores it in localStorage and the Area
+view offers a field to paste it into. Same-origin `/adsb` remains the default, which is
+correct when the site is served locally.
+
+
 No free ADS-B source sends CORS headers, so live traffic needs a server-side hop.
 The Cloudflare Worker was the obvious home and **does not work**: the CORS problem is
 solved, but every source then refuses Cloudflare's shared egress addresses.
@@ -392,7 +410,7 @@ variables × locations × hours. This is the single biggest constraint on anythi
 The API is kept on a separate cadence because the site changes far more often than the
 endpoint does.
 
-**Live traffic does not work on the deployed site.** The ADS-B proxy lives in `serve.rb`,
+**Live traffic on the deployed site needs a tunnel.** `./start.sh --tunnel` prints a public HTTPS address that forwards to the local proxy; paste it into the Area view once and it is remembered. Superseded note: The ADS-B proxy lives in `serve.rb`,
 which only runs locally — see the table above for why it cannot live on Cloudflare. The area
 map states this rather than showing an empty sky. Putting the proxy on a host with an
 ordinary address (Fly.io, Render) would fix it.

@@ -136,6 +136,31 @@ mountGlobe();
 
 let TRAFFIC = [], TRAFFIC_LAYERS = [], TRAFFIC_TIMER = 0;
 
+/* Where the ADS-B proxy lives.
+
+   It cannot be same-origin on the deployed site: no free ADS-B source sends CORS
+   headers, and every one of them refuses Cloudflare's egress addresses, so the
+   Worker cannot do it either. An HTTPS page also cannot reach http://localhost —
+   that is blocked outright, whatever the service worker appears to say.
+
+   What does work is a tunnel: a public HTTPS address that forwards to the proxy
+   running on this machine, so the outbound request leaves from an ordinary
+   residential address that the ADS-B services are happy to serve. ./start.sh
+   --tunnel prints the URL; paste it in once and it is remembered. */
+function trafficBase(){
+  try{
+    const saved = localStorage.getItem("adsbProxy");
+    if (saved) return saved.replace(/\/+$/, "");
+  }catch{}
+  return "";                      // same origin — correct when run locally
+}
+function setTrafficBase(v){
+  try{
+    if (v) localStorage.setItem("adsbProxy", v.trim().replace(/\/+$/, ""));
+    else localStorage.removeItem("adsbProxy");
+  }catch{}
+}
+
 async function fetchTraffic(){
   if (!GMAP) return null;
   const c = GMAP.getCenter();
@@ -144,7 +169,7 @@ async function fetchTraffic(){
   const km = Math.min(400, distance({lat:c.lat, lon:c.lng},
                                     {lat:b.getNorth(), lon:b.getEast()})/1000);
   const nm = Math.max(20, Math.round(km/1.852));
-  const url = `/adsb?src=adsblol&path=${encodeURIComponent(`v2/lat/${c.lat.toFixed(3)}/lon/${c.lng.toFixed(3)}/dist/${nm}`)}`;
+  const url = `${trafficBase()}/adsb?src=adsblol&path=${encodeURIComponent(`v2/lat/${c.lat.toFixed(3)}/lon/${c.lng.toFixed(3)}/dist/${nm}`)}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(r.status === 404 || r.status === 400
     ? "no proxy on this host" : `proxy said ${r.status}`);
@@ -211,13 +236,19 @@ async function toggleTraffic(){
     }catch(e){
       clearInterval(TRAFFIC_TIMER); TRAFFIC_TIMER = 0;
       btn.textContent = "Show live traffic";
+      const hint = `<div style="margin-top:8px">
+          <input id="gProxy" placeholder="https://something.trycloudflare.com" style="width:100%"
+                 value="${trafficBase()}">
+          <button class="act" id="gProxySave" style="margin-top:6px">Use this proxy</button>
+        </div>`;
       gStatus(e.message === "no proxy on this host"
-        ? `<span>Live traffic needs the local server</span><div>No free ADS-B source sends CORS
-           headers, so this needs a server-side hop. It is built into <span class="mono">serve.rb</span>
-           and works when you run the site with <span class="mono">./start.sh</span>. A static host has
-           no such route — and putting it on Cloudflare does not work either, because every source
-           refuses Cloudflare's shared egress addresses.</div>`
+        ? `<span>Point this at a proxy</span><div>No free ADS-B source sends CORS headers, so live
+           traffic needs a server-side hop — and it has to run somewhere with an ordinary address,
+           because every source refuses Cloudflare's. Run <span class="mono">./start.sh --tunnel</span>
+           on the machine with this project, then paste the printed URL here. It is remembered.${hint}</div>`
         : `<span>Traffic unavailable</span><div>${e.message}</div>`, "err");
+      const save = $("#gProxySave");
+      if (save) save.onclick = () => { setTrafficBase($("#gProxy").value); gStatus(""); toggleTraffic(); };
     }
   };
   ensureGMap();

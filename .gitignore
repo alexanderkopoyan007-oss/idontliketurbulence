@@ -21,3 +21,6 @@ node_modules/
 # It is the deployable single file — the whole point of the project — so it has
 # to be present for anyone who clones and serves the repo without running a
 # build. `./build.sh --check` verifies it matches src/.
+
+.tunnel.log
+.tunnel.pid

@@ -10,7 +10,7 @@ database_id = "75124d10-d312-4f2f-8741-6a23c419a03a"
 [vars]
 # The ADS-B CORS proxy is off by default: it spends third-party quota under
 # your account name, so enabling it should be a deliberate act.
-ENABLE_PROXY = "0"
+ENABLE_PROXY = "1"
 
 # SALT is deliberately NOT set here. A secret in a tracked file leaks the moment
 # the repo is shared, and this salt is the only thing stopping the rate-limit

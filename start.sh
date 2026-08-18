@@ -30,5 +30,40 @@ if ! nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
   fi
 fi
 
-echo "Ride Report running at http://localhost:$PORT"
+echo "Running at http://localhost:$PORT"
+
+# --tunnel publishes the local ADS-B proxy at a public HTTPS address.
+#
+# Live traffic on the deployed site needs this. The proxy has to egress from an
+# ordinary address — every free ADS-B source refuses Cloudflare's, so the Worker
+# cannot do it — and an HTTPS page cannot reach http://localhost. A tunnel gives
+# a public HTTPS front door that forwards here, so the outbound request still
+# leaves from this machine.
+if [ "${1:-}" = "--tunnel" ]; then
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "cloudflared not installed. Get it from https://github.com/cloudflare/cloudflared/releases" >&2
+    exit 1
+  fi
+  echo "Opening a tunnel…"
+  TLOG="$DIR/.tunnel.log"
+  : > "$TLOG"
+  nohup cloudflared tunnel --url "http://localhost:$PORT" --no-autoupdate > "$TLOG" 2>&1 &
+  echo $! > "$DIR/.tunnel.pid"
+  for _ in $(seq 1 40); do
+    TURL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TLOG" | head -1)
+    [ -n "$TURL" ] && break
+    sleep 1
+  done
+  if [ -n "$TURL" ]; then
+    echo
+    echo "  Tunnel: $TURL"
+    echo
+    echo "  Paste that into the Area view on the deployed site to enable live traffic."
+    echo "  The address changes each time; it is remembered in the browser until it does."
+  else
+    echo "Tunnel did not come up. Last output:" >&2
+    tail -5 "$TLOG" >&2
+  fi
+fi
+
 open "http://localhost:$PORT"
