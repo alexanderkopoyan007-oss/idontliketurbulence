@@ -9,6 +9,12 @@
    explicit that the physics comes first. The export button hands you the JSON so
    the data is yours either way. */
 
+/* Point this at a deployed Worker to enable sharing (see server/README.md).
+   Null means the recorder is local-only, which is the default and the shipped
+   state — there is nowhere to send anything, and the UI says so rather than
+   showing a button that fails. */
+const OBS_ENDPOINT = null;
+
 const REC = {
   on: false, wake: null, bins: [], buf: [], t0: 0, fsEst: 0,
   lastPos: null, posWatch: null, listener: null, lastBinAt: 0,
@@ -208,9 +214,22 @@ function drawRecordings(){
       −5/3 is turbulence, a flat one is something else.</p>
     <div class="hm-acts">
       <button class="act" id="recExport">Export JSON</button>
+      <button class="act" id="recShare">${OBS_ENDPOINT ? "Share observations" : "Sharing not configured"}</button>
       <button class="act ghost" id="recClear">Clear</button>
-    </div>`;
+    </div>
+    <p class="rec-note">${OBS_ENDPOINT
+      ? "Sharing sends only the numbers above plus a position rounded to 0.1 degrees (~11 km) and a time rounded to the minute. No account, no device id, nothing that identifies you or your device. It uploads after landing, never in flight."
+      : "This build has no observation server configured, so nothing can leave the device even by accident. Export gives you the raw JSON."}</p>`;
 
+  const share = $("#recShare");
+  if (share){
+    if (!OBS_ENDPOINT){
+      share.disabled = true;
+      share.title = "No observation server is configured for this build";
+    } else {
+      share.onclick = () => uploadObservations();
+    }
+  }
   $("#recExport").onclick = () => {
     const blob = new Blob([JSON.stringify({ recorded: REC.bins }, null, 1)], {type:"application/json"});
     const a = document.createElement("a");
@@ -238,3 +257,26 @@ function mountRecorder(){
   drawRecordings();
 }
 mountRecorder();
+
+/* Upload after landing, never during flight: an in-flight radio is expensive,
+   often unavailable, and the data is worth nothing until the flight is over. */
+async function uploadObservations(){
+  if (!OBS_ENDPOINT) return;
+  const good = REC.bins.filter(b => b.index !== undefined);
+  if (!good.length) return toast("Nothing to share yet");
+  if (REC.on) return toast("Stop recording first — upload happens after landing");
+  try{
+    const r = await fetch(OBS_ENDPOINT + "/observations", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ observations: good.map(b => ({
+        t: b.t, lat: b.lat, lon: b.lon, alt: b.alt,
+        index: b.index, slope: b.slope, r2: b.r2, kolm: b.kolm, rms: b.rms, fs: b.fs,
+      })) }),
+    });
+    if (!r.ok) throw new Error("server said " + r.status);
+    const j = await r.json();
+    toast("Shared " + j.stored + " observation" + (j.stored === 1 ? "" : "s"));
+  }catch(e){
+    toast("Could not share: " + e.message);
+  }
+}

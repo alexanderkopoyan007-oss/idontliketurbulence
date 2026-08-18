@@ -1,0 +1,17 @@
+name = "ride-report-obs"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Create the database first, then paste its id here:
+#   wrangler d1 create ride-report
+[[d1_databases]]
+binding = "DB"
+database_name = "ride-report"
+database_id = "PASTE_DATABASE_ID_HERE"
+
+[vars]
+# Salt for the rate-limit bucket hash. Change it. It is what stops the bucket
+# key being reversible to an address by anyone who guesses the scheme.
+SALT = "change-me-before-deploying"
+# The ADS-B CORS proxy is off by default: it spends third-party quota.
+ENABLE_PROXY = "0"
