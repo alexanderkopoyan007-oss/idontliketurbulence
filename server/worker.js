@@ -138,12 +138,26 @@ async function getVerification(env, origin){
   }, 200, origin);
 }
 
-/* CORS proxy for the ADS-B sources that refuse browsers. Disabled unless
-   ENABLE_PROXY is set, because it is the one route that spends someone else's
-   quota on your behalf. */
+/* CORS proxy for the ADS-B sources that refuse browsers.
+
+   MEASURED RESULT: this does not currently work, and the reason is worth
+   recording. The CORS problem it was built for is genuinely solved — the proxy
+   returns the right headers. But every free ADS-B source then refuses
+   Cloudflare egress, which comes from shared addresses that public APIs
+   throttle by default:
+
+     OpenSky         522, connection timed out after ~20s
+     adsb.lol        429, rate limited
+     airplanes.live  403, asks you to contact them describing your project
+
+   All three answer in under a second from an ordinary machine. So the blocker
+   moved from CORS to IP reputation, and no code change fixes it. The ways
+   forward are: email airplanes.live for access, run this proxy somewhere with a
+   normal address, or leave live traffic out. Disabled by default accordingly. */
 const PROXY_HOSTS = {
   opensky: "https://opensky-network.org/api/",
   adsblol: "https://api.adsb.lol/",
+  planeslive: "https://api.airplanes.live/",
 };
 async function proxy(request, env, url, origin){
   if (env.ENABLE_PROXY !== "1") return json({ error: "proxy disabled" }, 403, origin);
