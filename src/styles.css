@@ -423,3 +423,33 @@ body.calm #vWord{ color:var(--vellum)!important }
   .views{ margin:10px 0 0; align-self:flex-start }
   .jl-cbt{ margin-left:0; width:100% }
 }
+
+/* ─────────── out the window ─────────── */
+.win-head{font:500 15.5px/1.6 var(--body); color:var(--vellum); margin:0 0 14px}
+.win-head b{color:var(--amber-2); font-weight:600}
+.win-sum{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:9px; margin-bottom:14px}
+.win-sum div{background:var(--panel-2); border:1px solid var(--rule); border-radius:var(--r-s); padding:8px 10px}
+.win-sum span{display:block; font:600 9.5px/1 var(--disp); letter-spacing:.14em; text-transform:uppercase; color:var(--dim-2)}
+.win-sum u{display:block; margin-top:4px; font:500 13px/1.35 var(--mono); color:var(--vellum); text-decoration:none}
+.wtable{width:100%; border-collapse:collapse; font-size:13px}
+.wtable th{font:600 9.5px/1 var(--disp); letter-spacing:.14em; text-transform:uppercase; color:var(--dim-2);
+  text-align:left; padding:0 10px 7px; border-bottom:1px solid var(--rule)}
+.wtable td{padding:0; border-bottom:1px solid var(--rule)}
+.wrow{cursor:pointer; transition:background .12s}
+.wrow:hover,.wrow:focus-visible{background:var(--panel-2); outline:none}
+.wrow.hot{background:var(--panel-3); box-shadow:inset 3px 0 0 var(--amber)}
+.wrow .cell{padding:9px 10px}
+.wrow .cell.t{font:500 13px/1.25 var(--mono)}
+.wrow .cell.t em,.wrow .cell.place em{display:block; font-style:normal; font-size:10.5px; color:var(--dim-2); margin-top:2px}
+.wrow .cell.place b{font-weight:600}
+.wtag{display:inline-block; padding:2px 7px; border-radius:999px; font:600 9.5px/1.5 var(--disp);
+  letter-spacing:.1em; text-transform:uppercase; background:var(--panel-3); color:var(--dim)}
+.wtag.sun{background:#3A2708; color:var(--amber-2)}
+.wtag.aur{background:#123A2E; color:#5BE3B0}
+.wtag.range,.wtag.plateau,.wtag.foothills{background:#2A2033; color:#C9A9E8}
+.wtag.ice{background:#12293A; color:#8FD4F5}
+.wtag.desert{background:#33260F; color:#E8C98A}
+.wtag.island,.wtag.islands,.wtag.cape,.wtag.coast,.wtag.peninsula{background:#0F2A2E; color:#7FD8CE}
+.cell.side{font:600 11px/1 var(--disp); letter-spacing:.1em; text-transform:uppercase; color:var(--dim)}
+.cell.side.left{color:#7FD8CE} .cell.side.right{color:var(--amber-2)}
+.win-note{margin:12px 0 0; font-size:12px; line-height:1.55; color:var(--dim-2)}

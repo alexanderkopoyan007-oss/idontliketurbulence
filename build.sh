@@ -29,7 +29,7 @@ cd "$DIR"
 # at the top of the block, and splitting them would silently drop the second
 # file into sloppy mode.
 BLOCKS=(
-  "src/data/airports.js src/data/airlines.js"
+  "src/data/airports.js src/data/airlines.js src/data/features.js"
   "src/core.js"
   "src/engine.js"
   "src/analyse.js"
@@ -38,7 +38,8 @@ BLOCKS=(
   "src/panels.js"
   "src/astro.js"
   "src/seeing.js"
-  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/native.js"
+  "src/window.js"
+  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/native.js"
 )
 
 ALL_FILES=(src/shell/head.html src/styles.css src/shell/body.html src/shell/foot.html)

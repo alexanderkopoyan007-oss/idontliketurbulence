@@ -234,14 +234,28 @@ async function analyse(route, progress){
     const alongWind = low ? (low.u*Math.sin(b) + low.v*Math.cos(b)) : 0;
     const mw = mountainWave(w.C, ts, alongWind, w.trop && w.trop.ft);
     let cape = 0, prcp = 0;
+    /* Cloud cover is not a turbulence input — it is what decides whether there
+       is anything to see out of the window. Averaged, not maxed, because the
+       question is how much of the view is blocked. */
+    let cLow = null, cMid = null, cHigh = null;
     if (surface){
       const rd = [surface[i], surface[wp.length+i]].filter(Boolean);
+      const cl = [], cm = [], ch = [];
       for (const r of rd){
-        const c = atTime(r.hourly && r.hourly.cape, r.hourly && r.hourly.time, tSec);
-        const p = atTime(r.hourly && r.hourly.precipitation, r.hourly && r.hourly.time, tSec);
+        const H = r.hourly, T = H && H.time;
+        const c = atTime(H && H.cape, T, tSec);
+        const p = atTime(H && H.precipitation, T, tSec);
         if (c !== null) cape = Math.max(cape, c);
         if (p !== null) prcp = Math.max(prcp, p);
+        const lo = atTime(H && H.cloud_cover_low,  T, tSec);
+        const mi = atTime(H && H.cloud_cover_mid,  T, tSec);
+        const hi = atTime(H && H.cloud_cover_high, T, tSec);
+        if (lo !== null) cl.push(lo);
+        if (mi !== null) cm.push(mi);
+        if (hi !== null) ch.push(hi);
       }
+      const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+      cLow = avg(cl); cMid = avg(cm); cHigh = avg(ch);
     }
     const cv = convective(cape, prcp, w.trop && w.trop.ft);
 
@@ -275,6 +289,7 @@ async function analyse(route, progress){
     w.cat  = here.cat*lowTaper; w.mwt = here.mwt*lowTaper; w.con = here.con*lowTaper;
     w.spread = here.spread; w.diag = here.d || null;
     w.mw = mw; w.cv = cv; w.ts = ts; w.cape = cape; w.precip = prcp;
+    w.cloud = { low:cLow, mid:cMid, high:cHigh };
     w.band = band(w.edr);
     w.place = (i===0 || i===wp.length-1)
       ? (ap => ({ text:`${ap.name}${ap.city?", "+ap.city:""} (${ap.iata})`, short:ap.iata, ap, km:0 }))(i===0?dep:arr)

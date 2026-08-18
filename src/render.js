@@ -186,6 +186,7 @@ function setCursor(frac, fromTape){
   drawXS(CUR);
   const rows = document.querySelectorAll("#logBody tr.row");
   rows.forEach(r => r.classList.toggle("hot", +r.dataset.i === (f<0.5?a.i:b.i)));
+  if (typeof windowCursor === "function") windowCursor(CUR);
 }
 
 /* ══════════ MAP ════════════════════════════════════════════════════════ */

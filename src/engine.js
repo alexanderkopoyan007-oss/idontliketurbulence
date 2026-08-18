@@ -277,7 +277,7 @@ async function fetchSurface(points, h0, h1){
     const q = new URLSearchParams({
       latitude:  grp.map(p => p.lat.toFixed(4)).join(","),
       longitude: grp.map(p => p.lon.toFixed(4)).join(","),
-      hourly: "cape,precipitation", start_hour: h0, end_hour: h1,
+      hourly: "cape,precipitation,cloud_cover_low,cloud_cover_mid,cloud_cover_high", start_hour: h0, end_hour: h1,
       timeformat: "unixtime", timezone: "UTC", cell_selection: "nearest"
     });
     const j = await getJSON(`${OM}?${q}`);

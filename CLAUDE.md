@@ -53,6 +53,9 @@ src/
   calm.js             anxious-flyer mode — reframes copy, never changes numbers
   jetlag.js           circadian plan + the view router
   seeingview.js       seeing page fetch and render
+  data/features.js    Natural Earth physical features, bbox + centroid, 499 rows
+  window.js           what-is-out-the-window geometry: features, terminator, aurora
+  windowview.js       the window timeline panel, synced to the ride scrubber
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -169,6 +172,27 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
 
+### The window view
+
+Geometry only — it adds no model requests. Two things are load-bearing:
+
+- **Sunrise and sunset are computed for the moving aircraft**, not for either airport.
+  At cruise speed those differ enormously: an eastbound Atlantic crossing can compress
+  sunrise into twenty minutes, a westbound one can hold the sun on the horizon for hours.
+  The code finds terminator *crossings* along the track, never airport sun times.
+- **Aurora uses geomagnetic latitude, not geographic.** The oval follows the field, which
+  is why Edinburgh sees aurora far more often than Moscow at the same latitude. A centred
+  dipole at 80.7 N, 72.7 W (IGRF-13, 2025 epoch) is close enough for a likelihood
+  statement. The equatorward boundary by Kp is NOAA's published table, interpolated.
+
+The Natural Earth gazetteer is filtered on two rules that both matter. Features straddling
+the antimeridian get their bounding box computed in both signed and 0-360 frames, with the
+tighter one kept and a `wrap` flag set *from the resulting geometry* — deriving it from
+which branch ran produced 63 falsely-wrapped boxes instead of 7, and a falsely-wrapped box
+matches almost every longitude. Sparse classes (island groups, vague geoareas) are dropped
+above 20 degrees in both axes because their box is mostly open ocean; contiguous landforms
+are kept at any size, which is why the Sahara survives and Polynesia does not.
+
 ---
 
 ## Data sources and licences
@@ -184,6 +208,8 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 | [adsbdb](https://www.adsbdb.com/) | flight number → airport pair | free, no key |
 | [Flight Plan Database](https://flightplandatabase.com/) | filed route waypoints | free, no key, 100 req/IP |
 | [NOAA AWC](https://aviationweather.gov/) | international SIGMETs (best effort, CORS-blocked from some origins) | public domain |
+| [Natural Earth](https://www.naturalearthdata.com/) | physical feature gazetteer (50m regions) | public domain (CC0) |
+| [NOAA SWPC](https://services.swpc.noaa.gov/) | planetary K index forecast, for aurora | public domain |
 | [CARTO](https://carto.com/attributions) + [OpenStreetMap](https://www.openstreetmap.org/copyright) | basemap tiles | CC BY, ODbL |
 | [Leaflet](https://leafletjs.com/) | map rendering | BSD-2 |
 
