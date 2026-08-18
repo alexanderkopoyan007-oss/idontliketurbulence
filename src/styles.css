@@ -453,3 +453,22 @@ body.calm #vWord{ color:var(--vellum)!important }
 .cell.side{font:600 11px/1 var(--disp); letter-spacing:.1em; text-transform:uppercase; color:var(--dim)}
 .cell.side.left{color:#7FD8CE} .cell.side.right{color:var(--amber-2)}
 .win-note{margin:12px 0 0; font-size:12px; line-height:1.55; color:var(--dim-2)}
+
+/* ─────────── departure heatmap ─────────── */
+.hm-head{font:500 15px/1.6 var(--body); margin:0 0 14px}
+.hm-head b{color:var(--amber-2); font-weight:600}
+.hm{border-collapse:separate; border-spacing:3px; width:100%}
+.hm th{font:600 10px/1.2 var(--disp); letter-spacing:.1em; text-transform:uppercase;
+  color:var(--dim-2); text-align:center; padding:3px}
+.hm thead th em{display:block; font-style:normal; font-size:9.5px; color:var(--dim-2); margin-top:2px}
+.hm tbody th{text-align:right; font:500 11.5px/1 var(--mono); color:var(--dim); padding-right:8px; white-space:nowrap}
+.hm-cell{text-align:center; font:600 12.5px/1 var(--mono); color:#08111C;
+  border-radius:var(--r-s); padding:9px 4px; cursor:pointer; min-width:38px;
+  transition:transform .1s, box-shadow .1s}
+.hm-cell:hover,.hm-cell:focus-visible{transform:scale(1.09); outline:none;
+  box-shadow:0 0 0 2px var(--amber), 0 6px 16px -6px #000; position:relative; z-index:2}
+.hm-cell.empty{background:var(--panel-2); cursor:default}
+.hm-cell.empty:hover{transform:none; box-shadow:none}
+.hm-note{margin:12px 0 0; font-size:12px; line-height:1.55; color:var(--dim-2)}
+.hm-acts{display:flex; gap:8px; margin-top:10px}
+.act.ghost{background:transparent; border:1px solid var(--rule-2); color:var(--dim)}

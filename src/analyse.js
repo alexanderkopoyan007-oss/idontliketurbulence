@@ -331,8 +331,7 @@ async function analyse(route, progress){
 
   const aFactor = (ACFT[route.opts.acft] || ACFT.narrow).f;
   const felt = clamp(peak*aFactor, 0, 1);
-  const pen = 145*Math.max(0, meanEdr-0.04) + 74*Math.max(0, peak-0.10) + 22*(roughMin/totalMin);
-  const score = Math.round(clamp(100 - pen, 0, 100));
+  const score = rideScore(meanEdr, peak, roughMin/totalMin);
 
   /* confidence: forecast age, model agreement, sample density */
   const meanSpread = live.reduce((s,w)=>s+(w.spread||0),0)/Math.max(1,live.length);

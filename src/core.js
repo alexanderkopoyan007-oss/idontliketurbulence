@@ -127,6 +127,17 @@ const ACFT = {
   bizjet:  {f:1.30, label:"light jet"}
 };
 
+/* The ride score, 0-100. Shared so the departure heatmap and the full briefing
+   cannot drift apart: a heatmap cell that says 82 must mean the same thing as
+   the briefing you get by clicking it.
+     meanEdr  time-weighted mean EDR over the flight
+     peak     worst EDR anywhere on it
+     roughFrac fraction of the flight at light-or-above (EDR >= 0.16) */
+function rideScore(meanEdr, peak, roughFrac){
+  const pen = 145*Math.max(0, meanEdr-0.04) + 74*Math.max(0, peak-0.10) + 22*roughFrac;
+  return Math.round(clamp(100 - pen, 0, 100));
+}
+
 /* ─── 5. formatting ─────────────────────────────────────────────────────── */
 const pad2 = n => String(n).padStart(2,"0");
 const hhmmUTC = d => `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}Z`;

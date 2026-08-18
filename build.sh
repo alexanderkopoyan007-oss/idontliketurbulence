@@ -38,8 +38,8 @@ BLOCKS=(
   "src/panels.js"
   "src/astro.js"
   "src/seeing.js"
-  "src/window.js"
-  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/native.js"
+  "src/window.js src/heatmap.js"
+  "src/ui.js src/share.js src/calm.js src/jetlag.js src/seeingview.js src/windowview.js src/heatmapview.js src/native.js"
 )
 
 ALL_FILES=(src/shell/head.html src/styles.css src/shell/body.html src/shell/foot.html)
@@ -70,7 +70,13 @@ trap 'rm -f "$TMP"' EXIT
 
 if [ "${1:-}" = "--check" ]; then
   if diff -q "$TMP" "$OUT" >/dev/null 2>&1; then
-    echo "build --check: $OUT is up to date ($(wc -c < "$TMP" | tr -d ' ') bytes)"
+    WANT="ride-shell-$(shasum -a 256 "$TMP" | cut -c1-12)"
+    HAVE="$(sed -n 's|^const SHELL = "\(.*\)";|\1|p' www/sw.js)"
+    if [ "$WANT" != "$HAVE" ]; then
+      echo "build --check: www/sw.js cache name is stale ($HAVE, expected $WANT)" >&2
+      exit 1
+    fi
+    echo "build --check: $OUT is up to date ($(wc -c < "$TMP" | tr -d ' ') bytes, sw $HAVE)"
   else
     echo "build --check: $OUT differs from a fresh build of src/" >&2
     diff "$OUT" "$TMP" | head -40 >&2
@@ -78,6 +84,17 @@ if [ "${1:-}" = "--check" ]; then
   fi
 else
   mv "$TMP" "$OUT"
+
+  # Stamp the service-worker cache name with a hash of what we just built.
+  # sw.js is cache-first for same-origin requests, so a stale SHELL name serves
+  # the previous index.html forever and the change appears not to have landed.
+  # Doing this by hand is a step that gets forgotten — it was, twice — so the
+  # build derives it instead.
+  HASH="$(shasum -a 256 "$OUT" | cut -c1-12)"
+  if [ -f www/sw.js ]; then
+    sed -i '' "s|^const SHELL = \".*\";|const SHELL = \"ride-shell-$HASH\";|" www/sw.js
+    echo "service worker cache: ride-shell-$HASH"
+  fi
   trap - EXIT
   echo "built $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes, ${#ALL_FILES[@]} source files, ${#BLOCKS[@]} script blocks)"
 fi

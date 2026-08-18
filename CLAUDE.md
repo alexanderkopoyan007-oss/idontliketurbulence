@@ -56,6 +56,8 @@ src/
   data/features.js    Natural Earth physical features, bbox + centroid, 499 rows
   window.js           what-is-out-the-window geometry: features, terminator, aurora
   windowview.js       the window timeline panel, synced to the ride scrubber
+  heatmap.js          departure-time grid: one week fetched once, re-sampled per slot
+  heatmapview.js      the grid, its cost estimate and click-through
   native.js           Capacitor bridge, service-worker registration
   shell/foot.html     Leaflet tag and closing tags
 build.sh              concatenates src/ → www/index.html
@@ -171,6 +173,27 @@ Getting these wrong produces plausible numbers that are quietly meaningless.
 - **Model grid ≈ 25 km.** The eddies that actually move an aircraft are metres to hundreds
   of metres. Everything here is an inference from the large-scale flow to the small-scale
   ride. Below ~25–30 km the slider is interpolating, not resolving.
+
+### The departure heatmap
+
+Scoring 56 departure slots the obvious way means 56 briefings, which is both slow and far
+past the rate limit. It is also unnecessary: **the forecast fields do not change with your
+departure time, only the moment at which you sample them.** So the week is fetched once for
+a coarse waypoint set and every slot walks that same cached series with different timings —
+about 13x one briefing instead of 56x, in a single round of requests.
+
+Three reductions, all stated in the UI rather than hidden: one model, the coarse 16-waypoint
+scale, and cruise level only. The grid ranks slots against each other, so a consistent bias
+matters much less than it would in an absolute forecast.
+
+`rideScore()` lives in core.js and is shared with `analyse()` on purpose. A cell that says
+82 has to mean the same thing as the briefing it opens; two copies of that formula would
+drift and the grid would start lying about what it links to.
+
+Grid rows are the local hours that actually occur, never an assumed 0/3/6 set. Slots align
+to UTC boundaries, so at UTC+1 the local hours are 22:00, 01:00, 04:00 — a fixed row set
+matched none of them and rendered every cell empty. Deriving them also handles half-hour
+zones like IST.
 
 ### The window view
 

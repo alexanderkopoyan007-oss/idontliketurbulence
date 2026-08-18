@@ -18,6 +18,7 @@
     <button class="viewt on" id="vRide" aria-current="page">Ride</button>
     <button class="viewt" id="vJet">Jet lag</button>
     <button class="viewt" id="vSee">Seeing</button>
+    <button class="viewt" id="vHeat">Best time</button>
   </nav>
   <div class="zulu">UTC <b id="clock" class="mono">--:--</b></div>
 </header>
@@ -73,6 +74,32 @@
 </section>
 
 <!-- ── astronomical seeing ── -->
+<section class="strip jl-strip" id="heatView" hidden aria-label="Departure-time heatmap">
+  <h2 class="jl-title">Best time to fly</h2>
+  <p class="jl-intro">
+    The same forecast run across every departure slot for the next week, so you can see the
+    ride before you book rather than after. The week is fetched once and re-sampled per slot —
+    the fields do not change with your departure time, only the moment you meet them.
+  </p>
+  <div class="fields">
+    <div class="f f-4">
+      <label for="hdep">Departure airport</label>
+      <input id="hdep" autocomplete="off" spellcheck="false" placeholder="LHR, London…">
+      <div class="ac" id="acHDep"></div>
+    </div>
+    <div class="f f-4">
+      <label for="harr">Arrival airport</label>
+      <input id="harr" autocomplete="off" spellcheck="false" placeholder="JFK, New York…">
+      <div class="ac" id="acHArr"></div>
+    </div>
+    <div class="f f-3 f-go">
+      <button class="go" id="hmGo">Score the week</button>
+    </div>
+  </div>
+  <div id="hmStatus"></div>
+  <div id="hmOut"></div>
+</section>
+
 <section class="strip jl-strip" id="seeingView" hidden aria-label="Astronomical seeing forecast">
   <h2 class="jl-title">Seeing forecast</h2>
   <p class="jl-intro">
