@@ -236,13 +236,38 @@ function volInit(canvas, v){
   return { gl, prog, tex, ftex };
 }
 
+/* Camera basis, built as a proper look-at rather than hand-written trig.
+
+   The previous version wrote the nine terms out by hand and got the Y sign
+   wrong, so the centre ray pointed up when it should have pointed down. The box
+   test then returned t0 > t1 — no intersection — and every pixel fell through to
+   the background. A correctly sized, correctly initialised, entirely black
+   canvas, which looks like a dead renderer rather than a bad camera.
+
+   Deriving the basis from the eye vector cannot make that mistake: forward is
+   whatever points at the origin, and the other two axes follow from it. */
 function volMatrix(yaw, pitch){
-  const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
-  /* column-major 3x3 for GLSL mat3 */
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const eye = [Math.sin(yaw)*cp, sp, Math.cos(yaw)*cp];
+
+  /* forward: from the eye toward the centre of the volume */
+  const f = [-eye[0], -eye[1], -eye[2]];
+
+  /* right = normalise(f x worldUp); guard the degenerate straight-down case */
+  let r = [f[1]*0 - f[2]*1, f[2]*0 - f[0]*0, f[0]*1 - f[1]*0];
+  let rl = Math.hypot(r[0], r[1], r[2]);
+  if (rl < 1e-6){ r = [1,0,0]; rl = 1; }
+  r = [r[0]/rl, r[1]/rl, r[2]/rl];
+
+  /* up = right x forward — orthogonal by construction */
+  const u = [r[1]*f[2]-r[2]*f[1], r[2]*f[0]-r[0]*f[2], r[0]*f[1]-r[1]*f[0]];
+
+  /* Column-major for GLSL. The shader multiplies by vec3(ndc, -1.6), so the
+     third column has to be -forward for the centre ray to look at the origin. */
   return new Float32Array([
-    cy, 0, -sy,
-    sy*sp, cp, cy*sp,
-    sy*cp, -sp, cy*cp,
+    r[0], r[1], r[2],
+    u[0], u[1], u[2],
+    -f[0], -f[1], -f[2],
   ]);
 }
 
