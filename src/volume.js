@@ -290,6 +290,25 @@ function volFrame(){
   VOL.raf = requestAnimationFrame(volFrame);
 }
 
+/* Called when the view is opened. Without this the section is a heading, a
+   button and a large empty space, which reads as broken rather than as waiting —
+   the 3D view renders an existing briefing and cannot show anything before one
+   exists. */
+function volEnter(){
+  if (!$("#volGo")) return;
+  if (VOL.gl) return;                       // already rendering, leave it alone
+  if (typeof RES === "undefined" || !RES){
+    volStatus(`<span>Nothing to render yet</span><div>This view draws the flight you last
+      briefed, so there has to be one. Go to <b>Ride</b>, build a briefing, then come back and
+      press <b>Render this briefing</b>.</div>`);
+    $("#volGo").disabled = true;
+    return;
+  }
+  $("#volGo").disabled = false;
+  volStatus(`<span>Ready</span><div>Press <b>Render this briefing</b> to draw
+    ${RES.route.dep.iata}→${RES.route.arr.iata} in three dimensions.</div>`);
+}
+
 function mountVolume(){
   const host = $("#volCanvas"); if (!host) return;
   const btn = $("#volGo"); if (!btn) return;

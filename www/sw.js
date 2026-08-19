@@ -2,7 +2,7 @@
    forecast is worse than no forecast, so network failures surface as errors. */
 /* Bump on every change to index.html: the fetch handler is cache-first for
    same-origin requests, so a stale shell would otherwise be served forever. */
-const SHELL = "ride-shell-57f7140a476b";
+const SHELL = "ride-shell-05c902375186";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -25,19 +25,30 @@ self.addEventListener("fetch", e => {
   // untouched: caching it would be wrong and, worse, the index.html fallback
   // below would answer a failed data request with a page of HTML.
   if (u.origin !== location.origin) return;
+
+  /* NAVIGATIONS GO TO THE NETWORK FIRST.
+
+     This was cache-first, which meant a deploy stayed invisible until the worker
+     updated AND the page was reloaded twice. Three separate "it looks broken"
+     reports in one afternoon traced back to it, every one of them a stale shell
+     rather than the bug being reported. Offline still works — the cache is the
+     fallback, not the first answer. */
+  if (e.request.mode === "navigate"){
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok){ const copy = res.clone(); caches.open(SHELL).then(c => c.put("./index.html", copy)); }
+        return res;
+      }).catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
+  /* Everything else same-origin is a static asset — icons, the manifest — which
+     changes only when SHELL changes, so cache-first is right for it. */
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      if (res.ok && u.origin === location.origin) {
-        const copy = res.clone(); caches.open(SHELL).then(c => c.put(e.request, copy));
-      }
+      if (res.ok){ const copy = res.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
       return res;
-    }).catch(() => {
-      /* The shell fallback is for NAVIGATIONS only. Answering a failed data
-         request with index.html hands the caller a page of HTML where it asked
-         for JSON, which looks like a parse bug and hides the real failure — it
-         cost an afternoon once already. Anything else fails honestly. */
-      if (e.request.mode === "navigate") return caches.match("./index.html");
-      return Response.error();
-    }))
+    }).catch(() => Response.error()))
   );
 });

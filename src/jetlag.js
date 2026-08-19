@@ -304,7 +304,10 @@ function mountJetlag(){
   $("#vRide").addEventListener("click", () => goView("ride"));
   if ($("#vHeat")) $("#vHeat").addEventListener("click", () => goView("heat"));
   if ($("#vRec"))  $("#vRec").addEventListener("click",  () => goView("record"));
-  if ($("#vVol"))  $("#vVol").addEventListener("click",  () => goView("volume"));
+  if ($("#vVol"))  $("#vVol").addEventListener("click",  () => {
+    goView("volume");
+    if (typeof volEnter === "function") volEnter();
+  });
   if ($("#vArea")) $("#vArea").addEventListener("click", () => { goView("area"); setTimeout(()=>{ if (typeof ensureGMap==="function"){ ensureGMap().invalidateSize(); } }, 60); });
   $("#vJet").addEventListener("click",  () => goView("jetlag"));
   const se = $("#vSee"); if (se) se.addEventListener("click", () => goView("seeing"));
