@@ -424,6 +424,12 @@ async function lookupAircraft(a){
   if (AC_INFO.has(key)) return AC_INFO.get(key);
 
   const info = { call, hex: a.hex || null };
+  /* adsb.lol carries the type and registration inline, so when the live proxy is
+     in use they are already here. adsbdb's airframe database has real gaps — it
+     answers "unknown aircraft" for plenty of hexes — so anything the feed
+     already knows is kept and the lookup only fills what is missing. */
+  if (a.t) info.icaoType = a.t;
+  if (a.r) info.registration = a.r;
   /* Route by callsign, aeroplane by hex. Either can be absent — a private
      flight has no published route, and OpenSky sometimes has no callsign —
      so each is attempted independently and missing ones are simply not shown. */
@@ -443,9 +449,9 @@ async function lookupAircraft(a){
         const ac = j && j.response && j.response.aircraft;
         if (!ac) return;
         info.type = ac.type;
-        info.icaoType = ac.icao_type;
+        info.icaoType = ac.icao_type || info.icaoType;
         info.manufacturer = ac.manufacturer;
-        info.registration = ac.registration;
+        info.registration = ac.registration || info.registration;
         info.owner = ac.registered_owner;
       }).catch(() => {}));
 
@@ -479,6 +485,8 @@ async function fillAircraftPopup(a, popup){
   if (info && info.airline)  rows.push(`<div><em>Airline</em> ${info.airline}</div>`);
   if (info && (info.manufacturer || info.type))
     rows.push(`<div><em>Aircraft</em> ${[info.manufacturer, info.type].filter(Boolean).join(" ")}${info.icaoType ? " (" + info.icaoType + ")" : ""}</div>`);
+  else if (info && info.icaoType)
+    rows.push(`<div><em>Aircraft</em> ${info.icaoType}</div>`);
   if (info && info.registration) rows.push(`<div><em>Registration</em> ${info.registration}</div>`);
   if (info && info.owner && info.owner !== info.airline)
     rows.push(`<div><em>Operator</em> ${info.owner}</div>`);
