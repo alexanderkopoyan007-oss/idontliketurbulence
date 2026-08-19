@@ -134,7 +134,7 @@ mountGlobe();
    this works when the site is served locally. On a static host there is no /adsb
    route, and the UI says so instead of quietly showing an empty sky. */
 
-let TRAFFIC = [], TRAFFIC_LAYERS = [], TRAFFIC_TIMER = 0;
+let TRAFFIC = [], TRAFFIC_LAYERS = [], TRAFFIC_TIMER = 0, TRAFFIC_AGE = null;
 
 /* Where the ADS-B proxy lives.
 
@@ -173,6 +173,33 @@ function setTrafficBase(v){
    slower timer than regional, and the panel says how many are left. */
 const OSKY_GLOBAL_COST = 4, OSKY_DAILY_CREDITS = 400;
 
+/* Published global feed. A scheduled GitHub Action fetches the world every 15
+   minutes and force-pushes it to a data branch; raw.githubusercontent.com sends
+   access-control-allow-origin: *, so the browser reads it directly and no proxy
+   exists in this path at all. Nothing has to be running for it to work.
+
+   The trade is staleness: cron fires every 15 minutes at best and often late,
+   so positions can be a quarter-hour old. That is fine for seeing who is flying
+   through which weather and wrong for watching one aircraft turn, which is why
+   a live proxy still takes priority when one is configured. */
+const TRAFFIC_FEED =
+  "https://raw.githubusercontent.com/alexanderkopoyan007-oss/idontliketurbulence/traffic-data/data/traffic.json";
+
+async function fetchPublishedTraffic(){
+  const r = await fetch(TRAFFIC_FEED, { cache: "no-store" });
+  if (!r.ok) throw new Error("published feed unavailable (" + r.status + ")");
+  const j = await r.json();
+  const age = Date.now()/1000 - (j.t || 0);
+  return {
+    ageSec: Math.max(0, Math.round(age)),
+    aircraft: (j.ac || []).map(a => ({
+      flight: a[0], lat: a[1], lon: a[2],
+      alt_baro: a[3] === null ? null : a[3]*100,
+      gs: a[4], track: a[5], src: "published feed",
+    })),
+  };
+}
+
 function trafficBudget(){
   let st;
   try { st = JSON.parse(localStorage.getItem("oskyBudget") || "{}"); } catch { st = {}; }
@@ -202,6 +229,14 @@ async function fetchTraffic(){
     return r.json().catch(() => { throw new Error("no proxy on this host"); });
   };
 
+  if (zoom <= GLOBAL_ZOOM && !trafficBase()){
+    /* No live proxy configured: use the published feed. It needs nothing
+       running and costs nothing, at the price of being a few minutes old. */
+    const pub = await fetchPublishedTraffic();
+    TRAFFIC_AGE = pub.ageSec;
+    return pub.aircraft;
+  }
+
   if (zoom <= GLOBAL_ZOOM){
     const st = trafficBudget();
     if (st.used + OSKY_GLOBAL_COST > OSKY_DAILY_CREDITS)
@@ -227,6 +262,7 @@ async function fetchTraffic(){
   const km = Math.min(400, distance({lat:c.lat, lon:c.lng},
                                     {lat:b.getNorth(), lon:b.getEast()})/1000);
   const nm = Math.max(20, Math.round(km/1.852));
+  TRAFFIC_AGE = null;
   const j = await get("adsblol", `v2/lat/${c.lat.toFixed(3)}/lon/${c.lng.toFixed(3)}/dist/${nm}`);
   return (j.ac || []).filter(a => isFinite(a.lat) && isFinite(a.lon))
                      .map(a => ({ ...a, src: "adsb.lol" }));
@@ -284,12 +320,18 @@ function drawTraffic(){
 
   const st = trafficBudget();
   const tag = $("#gTraffic");
-  if (tag) tag.textContent = TRAFFIC.length
-    ? `${TRAFFIC.length.toLocaleString()} aircraft` +
-      (GMAP.getZoom() <= GLOBAL_ZOOM
-        ? ` · global · ${Math.max(0, Math.floor((OSKY_DAILY_CREDITS - st.used)/OSKY_GLOBAL_COST))} refreshes left today`
-        : " · this view")
-    : "";
+  if (tag){
+    let note = "";
+    if (TRAFFIC_AGE !== null){
+      const m = Math.round(TRAFFIC_AGE/60);
+      note = ` · global · published feed, ${m < 1 ? "under a minute" : m + " min"} old`;
+    } else if (GMAP.getZoom() <= GLOBAL_ZOOM){
+      note = ` · global · ${Math.max(0, Math.floor((OSKY_DAILY_CREDITS - st.used)/OSKY_GLOBAL_COST))} refreshes left today`;
+    } else {
+      note = " · this view";
+    }
+    tag.textContent = TRAFFIC.length ? `${TRAFFIC.length.toLocaleString()} aircraft` + note : "";
+  }
 
   GMAP.off("popupopen").on("popupopen", e => {
     const link = e.popup.getElement() && e.popup.getElement().querySelector(".ac-brief");
@@ -340,6 +382,8 @@ async function toggleTraffic(){
   await load();
   /* Regional is cheap, so 20 s. Global costs 4 of 400 daily credits per call,
      so it goes on a 3-minute timer — 100 refreshes is not many. */
-  const period = () => GMAP.getZoom() <= GLOBAL_ZOOM ? 180000 : 20000;
+  const period = () => GMAP.getZoom() > GLOBAL_ZOOM ? 20000
+                     : trafficBase() ? 180000
+                     : 300000;   /* published feed only changes every 15 min */
   TRAFFIC_TIMER = setInterval(load, period());
 }

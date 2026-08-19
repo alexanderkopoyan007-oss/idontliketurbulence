@@ -1,0 +1,91 @@
+name: Publish global traffic
+
+# Live traffic without a server. A scheduled run fetches the global ADS-B feed,
+# reduces it, and force-pushes it to a data branch, which the site then reads
+# straight from raw.githubusercontent.com — that origin sends
+# access-control-allow-origin: *, so no proxy is involved at all.
+#
+# CADENCE IS SET BY A RATE LIMIT, NOT BY TASTE. OpenSky gives anonymous callers
+# 400 credits a day and charges 4 for an unbounded global query, so 100 calls is
+# the ceiling. Every 15 minutes is 96 a day and fits under it; every 5 minutes
+# would be 288 and would start failing before lunchtime.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: traffic
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch the global feed
+        id: fetch
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 90 -o raw.json -w '%{http_code}' \
+            -H 'Accept: application/json' \
+            -H 'User-Agent: IDontLikeTurbulence/1.0 (personal, non-commercial)' \
+            'https://opensky-network.org/api/states/all')
+          echo "status=$code"
+          if [ "$code" != "200" ]; then
+            echo "OpenSky returned $code — not publishing." >&2
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Reduce it
+        if: steps.fetch.outputs.ok == 'true'
+        run: |
+          node -e '
+            const fs = require("fs");
+            const raw = JSON.parse(fs.readFileSync("raw.json","utf8"));
+            const out = [];
+            for (const s of raw.states || []){
+              const [icao, call, , , , lon, lat, baro, onGround, vel, trk, , , geo] = s;
+              if (onGround || lon === null || lat === null) continue;
+              const altM = baro !== null ? baro : geo;
+              out.push([
+                (call || "").trim() || icao,
+                +lat.toFixed(3), +lon.toFixed(3),
+                altM !== null ? Math.round(altM/0.3048/100) : null,
+                vel !== null ? Math.round(vel*1.94384) : null,
+                trk !== null ? Math.round(trk) : null,
+              ]);
+            }
+            if (out.length < 100) {
+              // A near-empty feed means something is wrong upstream. Publishing it
+              // would replace good data with an empty sky.
+              console.error("only " + out.length + " aircraft — refusing to publish");
+              process.exit(1);
+            }
+            fs.mkdirSync("data", { recursive: true });
+            fs.writeFileSync("data/traffic.json", JSON.stringify({
+              t: raw.time, n: out.length,
+              f: "callsign,lat,lon,flightLevel,knots,track",
+              ac: out,
+            }));
+            console.log("published " + out.length + " aircraft");
+          '
+
+      - name: Publish to the data branch
+        if: steps.fetch.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name  "traffic-bot"
+          git config user.email "traffic-bot@users.noreply.github.com"
+          # An orphan branch holding one commit: the file is replaced every run,
+          # so the repository never accumulates 96 commits a day of history.
+          git checkout --orphan traffic-data
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          git add -f data/traffic.json
+          git commit -m "traffic $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f origin traffic-data
