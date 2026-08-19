@@ -521,3 +521,16 @@ body.calm #vWord{ color:var(--vellum)!important }
 .act:active{transform:translateY(1px)}
 .act:disabled{opacity:.5; cursor:not-allowed}
 .act:disabled:hover{border-color:var(--rule-2); color:var(--vellum)}
+
+/* ─────────── aircraft popup ─────────── */
+.acpop b.mono{font:600 14px/1.2 var(--mono); color:var(--amber-2)}
+.acpop-now{font:500 11.5px/1.4 var(--mono); color:var(--dim); margin:3px 0 8px}
+.acpop-info{font-size:12.5px; line-height:1.5}
+.acpop-info div{margin-bottom:2px}
+.acpop-info em{font-style:normal; color:var(--dim-2); display:inline-block; min-width:74px}
+.acpop-route{font-size:13.5px; margin-bottom:6px !important}
+.acpop-route b{color:var(--vellum); font-family:var(--mono)}
+.acpop-route span{color:var(--dim-2); font-size:11.5px}
+.acpop-none{color:var(--dim-2); font-size:12px}
+.acpop-src{color:var(--dim-2); font-size:10.5px; margin:6px 0 8px !important}
+.acpop .act{padding:8px 11px; font-size:11px; width:100%}

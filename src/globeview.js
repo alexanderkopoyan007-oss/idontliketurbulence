@@ -195,7 +195,7 @@ async function fetchPublishedTraffic(){
     aircraft: (j.ac || []).map(a => ({
       flight: a[0], lat: a[1], lon: a[2],
       alt_baro: a[3] === null ? null : a[3]*100,
-      gs: a[4], track: a[5], src: "published feed",
+      gs: a[4], track: a[5], hex: a[6] || null, src: "published feed",
     })),
   };
 }
@@ -318,14 +318,13 @@ function drawTraffic(){
         zIndexOffset: 800,
       }).addTo(GMAP);
     }
-    m.bindPopup(
-      `<b style="font-family:var(--mono)">${call || a.hex}</b><br>` +
-      (alt !== null ? `${fmtFL(alt)} · ` : "") +
-      (isFinite(a.gs) ? `${Math.round(a.gs)} kt · ` : "") +
-      (isFinite(a.track) ? `track ${Math.round(a.track)}°` : "") +
-      `<br><span style="color:#607289;font-size:11px">${a.src}</span><br>` +
-      (call ? `<a href="#" class="ac-brief" data-call="${call}">Briefing for this flight</a>`
-            : `<span style="color:#8DA0B8">no callsign</span>`));
+    /* The popup opens immediately with what the feed knows, then fills in what
+       it does not: the route and the actual aeroplane. Both come from adsbdb,
+       which is free, keyless and CORS-open, so the lookups happen straight from
+       the browser. They are only fired on click — doing 5,000 of them up front
+       would be absurd and would get the app blocked. */
+    m.bindPopup(() => aircraftPopupHTML(a), { minWidth: 240 });
+    m.on("popupopen", ev => fillAircraftPopup(a, ev.popup));
     TRAFFIC_LAYERS.push(m);
   }
 
@@ -398,4 +397,109 @@ async function toggleTraffic(){
                      : trafficBase() ? 180000
                      : 300000;   /* published feed only changes every 15 min */
   TRAFFIC_TIMER = setInterval(load, period());
+}
+
+
+/* ══════════ AIRCRAFT POPUP ══════════════════════════════════════════════ */
+
+const AC_INFO = new Map();          // hex/callsign -> resolved details, cached
+
+function aircraftPopupHTML(a){
+  const call = (a.flight || "").trim();
+  const alt = isFinite(a.alt_baro) ? a.alt_baro : null;
+  return `<div class="acpop" data-key="${call || a.hex || ""}">
+    <b class="mono">${call || a.hex || "unknown"}</b>
+    <div class="acpop-now">${[
+      alt !== null ? fmtFL(alt) : null,
+      isFinite(a.gs) ? Math.round(a.gs) + " kt" : null,
+      isFinite(a.track) ? "track " + Math.round(a.track) + "°" : null,
+    ].filter(Boolean).join(" · ")}</div>
+    <div class="acpop-info">Looking up…</div>
+  </div>`;
+}
+
+async function lookupAircraft(a){
+  const call = (a.flight || "").trim();
+  const key = call || a.hex || "";
+  if (AC_INFO.has(key)) return AC_INFO.get(key);
+
+  const info = { call, hex: a.hex || null };
+  /* Route by callsign, aeroplane by hex. Either can be absent — a private
+     flight has no published route, and OpenSky sometimes has no callsign —
+     so each is attempted independently and missing ones are simply not shown. */
+  const jobs = [];
+  if (call) jobs.push(
+    getJSON(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(call)}`, 1)
+      .then(j => {
+        const f = j && j.response && j.response.flightroute;
+        if (!f) return;
+        info.airline = f.airline && f.airline.name;
+        info.from = f.origin && { iata: f.origin.iata_code, city: f.origin.municipality, icao: f.origin.icao_code };
+        info.to   = f.destination && { iata: f.destination.iata_code, city: f.destination.municipality, icao: f.destination.icao_code };
+      }).catch(() => {}));
+  if (a.hex) jobs.push(
+    getJSON(`https://api.adsbdb.com/v0/aircraft/${encodeURIComponent(a.hex)}`, 1)
+      .then(j => {
+        const ac = j && j.response && j.response.aircraft;
+        if (!ac) return;
+        info.type = ac.type;
+        info.icaoType = ac.icao_type;
+        info.manufacturer = ac.manufacturer;
+        info.registration = ac.registration;
+        info.owner = ac.registered_owner;
+      }).catch(() => {}));
+
+  await Promise.all(jobs);
+  AC_INFO.set(key, info);
+  return info;
+}
+
+async function fillAircraftPopup(a, popup){
+  const el = popup.getElement && popup.getElement();
+  if (!el) return;
+  const box = el.querySelector(".acpop-info");
+  if (!box) return;
+
+  let info;
+  try { info = await lookupAircraft(a); }
+  catch { info = null; }
+
+  const stillOpen = popup.getElement && popup.getElement();
+  if (!stillOpen) return;
+  const target = stillOpen.querySelector(".acpop-info");
+  if (!target) return;
+
+  const call = (a.flight || "").trim();
+  const rows = [];
+  if (info && info.from && info.to){
+    rows.push(`<div class="acpop-route"><b>${info.from.iata || "?"}</b>
+      <span>${info.from.city || ""}</span> → <b>${info.to.iata || "?"}</b>
+      <span>${info.to.city || ""}</span></div>`);
+  }
+  if (info && info.airline)  rows.push(`<div><em>Airline</em> ${info.airline}</div>`);
+  if (info && (info.manufacturer || info.type))
+    rows.push(`<div><em>Aircraft</em> ${[info.manufacturer, info.type].filter(Boolean).join(" ")}${info.icaoType ? " (" + info.icaoType + ")" : ""}</div>`);
+  if (info && info.registration) rows.push(`<div><em>Registration</em> ${info.registration}</div>`);
+  if (info && info.owner && info.owner !== info.airline)
+    rows.push(`<div><em>Operator</em> ${info.owner}</div>`);
+
+  const canBrief = !!(info && info.from && info.to);
+  const briefBtn = canBrief
+    ? `<button class="act ac-brief" data-call="${call}">Turbulence report for this flight</button>`
+    : call
+      ? `<button class="act ac-brief" data-call="${call}">Try a turbulence report</button>`
+      : "";
+
+  target.innerHTML = (rows.length ? rows.join("") : `<div class="acpop-none">No published route or airframe
+      record for this one — often a private, military or positioning flight.</div>`)
+    + `<div class="acpop-src">${a.src}</div>`
+    + briefBtn;
+
+  const btn = target.querySelector(".ac-brief");
+  if (btn) btn.onclick = ev => {
+    ev.preventDefault();
+    goView("ride"); tab("flight");
+    $("#fnum").value = btn.dataset.call;
+    $("#goFlight").click();
+  };
 }

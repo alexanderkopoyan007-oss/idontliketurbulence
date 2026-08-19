@@ -61,11 +61,12 @@ jobs:
               if (onGround || lon === null || lat === null) continue;
               const altM = baro !== null ? baro : geo;
               out.push([
-                (call || "").trim() || icao,
+                (call || "").trim(),
                 +lat.toFixed(3), +lon.toFixed(3),
                 altM !== null ? Math.round(altM/0.3048/100) : null,
                 vel !== null ? Math.round(vel*1.94384) : null,
                 trk !== null ? Math.round(trk) : null,
+                icao,   // needed to look the aircraft up: type, registration, operator
               ]);
             }
             if (out.length < 100) {
@@ -77,7 +78,7 @@ jobs:
             fs.mkdirSync("data", { recursive: true });
             fs.writeFileSync("data/traffic.json", JSON.stringify({
               t: raw.time, n: out.length,
-              f: "callsign,lat,lon,flightLevel,knots,track",
+              f: "callsign,lat,lon,flightLevel,knots,track,icao24",
               ac: out,
             }));
             console.log("published " + out.length + " aircraft");
