@@ -348,11 +348,6 @@ details.meth .pad{border-top:1px solid var(--rule)}
   input[type=range]::-moz-range-track{height:4px; border-radius:2px; background:var(--rule-2)}
   input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%; background:var(--amber); border:2px solid var(--ink)}
   input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--amber-2); outline-offset:2px}
-  .acts{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
-  .act{font:600 12px/1 var(--cond); letter-spacing:.09em; text-transform:uppercase; color:var(--vellum);
-    background:var(--panel-2); border:1px solid var(--rule-2); border-radius:3px; padding:11px 15px; cursor:pointer}
-  .act:hover{border-color:var(--amber); color:var(--amber)}
-  .act:active{transform:translateY(1px)}
   .toast{position:fixed; left:50%; bottom:26px; transform:translate(-50%,14px); z-index:9999;
     background:var(--panel-3); border:1px solid var(--rule-2); color:var(--vellum); border-radius:4px;
     padding:11px 17px; font:500 13px var(--body); opacity:0; pointer-events:none; transition:.22s}
@@ -549,6 +544,17 @@ body.calm #vWord{ color:var(--vellum)!important }
 .ac-live{position:absolute; left:-9px; top:-9px; width:18px; height:18px; line-height:18px;
   text-align:center; font-size:15px; color:var(--amber); text-shadow:0 0 5px #000; pointer-events:auto}
 .ac-live.low{color:var(--dim-2); font-size:12px}
+
+
+/* ─────────── action buttons ─────────── */
+.acts{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
+.act{font:600 12px/1 var(--disp); letter-spacing:.09em; text-transform:uppercase; color:var(--vellum);
+  background:var(--panel-2); border:1px solid var(--rule-2); border-radius:3px; padding:11px 15px;
+  cursor:pointer}
+.act:hover{border-color:var(--amber); color:var(--amber)}
+.act:active{transform:translateY(1px)}
+.act:disabled{opacity:.5; cursor:not-allowed}
+.act:disabled:hover{border-color:var(--rule-2); color:var(--vellum)}
 </style>
 </head>
 <body>
@@ -15242,12 +15248,23 @@ async function fetchTraffic(){
     return r.json().catch(() => { throw new Error("no proxy on this host"); });
   };
 
-  if (zoom <= GLOBAL_ZOOM && !trafficBase()){
-    /* No live proxy configured: use the published feed. It needs nothing
-       running and costs nothing, at the price of being a few minutes old. */
+  if (!trafficBase()){
+    /* No live proxy configured: use the published feed, whatever the zoom.
+
+       This used to be gated on being zoomed out, which was simply wrong — the
+       feed is global, so it serves a close-in view perfectly well. Gating it
+       meant zooming in produced "point this at a proxy" on a site that already
+       had the data, which is the opposite of degrading gracefully.
+
+       Zoomed in, the world is trimmed to the visible area plus a margin, so a
+       city view draws a few dozen aircraft instead of six thousand. */
     const pub = await fetchPublishedTraffic();
     TRAFFIC_AGE = pub.ageSec;
-    return pub.aircraft;
+    if (zoom <= GLOBAL_ZOOM) return pub.aircraft;
+    const b = GMAP.getBounds().pad(0.25);
+    return pub.aircraft.filter(a =>
+      a.lat >= b.getSouth() && a.lat <= b.getNorth() &&
+      a.lon >= b.getWest()  && a.lon <= b.getEast());
   }
 
   if (zoom <= GLOBAL_ZOOM){
@@ -15337,7 +15354,8 @@ function drawTraffic(){
     let note = "";
     if (TRAFFIC_AGE !== null){
       const m = Math.round(TRAFFIC_AGE/60);
-      note = ` · global · published feed, ${m < 1 ? "under a minute" : m + " min"} old`;
+      const scope = GMAP.getZoom() <= GLOBAL_ZOOM ? "global" : "this view";
+      note = ` · ${scope} · published feed, ${m < 1 ? "under a minute" : m + " min"} old`;
     } else if (GMAP.getZoom() <= GLOBAL_ZOOM){
       note = ` · global · ${Math.max(0, Math.floor((OSKY_DAILY_CREDITS - st.used)/OSKY_GLOBAL_COST))} refreshes left today`;
     } else {

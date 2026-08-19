@@ -229,12 +229,23 @@ async function fetchTraffic(){
     return r.json().catch(() => { throw new Error("no proxy on this host"); });
   };
 
-  if (zoom <= GLOBAL_ZOOM && !trafficBase()){
-    /* No live proxy configured: use the published feed. It needs nothing
-       running and costs nothing, at the price of being a few minutes old. */
+  if (!trafficBase()){
+    /* No live proxy configured: use the published feed, whatever the zoom.
+
+       This used to be gated on being zoomed out, which was simply wrong — the
+       feed is global, so it serves a close-in view perfectly well. Gating it
+       meant zooming in produced "point this at a proxy" on a site that already
+       had the data, which is the opposite of degrading gracefully.
+
+       Zoomed in, the world is trimmed to the visible area plus a margin, so a
+       city view draws a few dozen aircraft instead of six thousand. */
     const pub = await fetchPublishedTraffic();
     TRAFFIC_AGE = pub.ageSec;
-    return pub.aircraft;
+    if (zoom <= GLOBAL_ZOOM) return pub.aircraft;
+    const b = GMAP.getBounds().pad(0.25);
+    return pub.aircraft.filter(a =>
+      a.lat >= b.getSouth() && a.lat <= b.getNorth() &&
+      a.lon >= b.getWest()  && a.lon <= b.getEast());
   }
 
   if (zoom <= GLOBAL_ZOOM){
@@ -324,7 +335,8 @@ function drawTraffic(){
     let note = "";
     if (TRAFFIC_AGE !== null){
       const m = Math.round(TRAFFIC_AGE/60);
-      note = ` · global · published feed, ${m < 1 ? "under a minute" : m + " min"} old`;
+      const scope = GMAP.getZoom() <= GLOBAL_ZOOM ? "global" : "this view";
+      note = ` · ${scope} · published feed, ${m < 1 ? "under a minute" : m + " min"} old`;
     } else if (GMAP.getZoom() <= GLOBAL_ZOOM){
       note = ` · global · ${Math.max(0, Math.floor((OSKY_DAILY_CREDITS - st.used)/OSKY_GLOBAL_COST))} refreshes left today`;
     } else {
