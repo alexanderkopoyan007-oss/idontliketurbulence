@@ -15338,7 +15338,7 @@ function drawTraffic(){
     let m;
     if (many){
       m = L.circleMarker([a.lat, a.lon], {
-        renderer: TRAFFIC_CANVAS, radius: alt !== null && alt > 20000 ? 2.6 : 1.8,
+        renderer: TRAFFIC_CANVAS, radius: alt !== null && alt > 20000 ? 3.2 : 2.2,
         color: trafficColour(alt), weight: 0, fillColor: trafficColour(alt), fillOpacity: 0.85,
       }).addTo(GMAP);
     } else {
@@ -15375,6 +15375,34 @@ function drawTraffic(){
     }
     tag.textContent = TRAFFIC.length ? `${TRAFFIC.length.toLocaleString()} aircraft` + note : "";
   }
+
+  /* Hit target.
+
+     Above the DOM limit these are canvas circles of about two pixels, and
+     Leaflet hit-tests a circleMarker at exactly its radius plus stroke — so the
+     dots were technically clickable and practically not. Inflating the radius
+     would turn a world view into porridge, so instead the map takes the click
+     and finds the nearest aircraft within a generous pixel radius. Small dots,
+     large target. */
+  GMAP.off("click").on("click", ev => {
+    if (!TRAFFIC.length) return;
+    const p = ev.layerPoint;
+    let best = null, bestD2 = Infinity;
+    for (const a of TRAFFIC){
+      const q = GMAP.latLngToLayerPoint([a.lat, a.lon]);
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < bestD2){ bestD2 = d2; best = a; }
+    }
+    const GRAB_PX = 20;
+    if (!best || bestD2 > GRAB_PX*GRAB_PX) return;
+    L.popup({ minWidth: 240 })
+      .setLatLng([best.lat, best.lon])
+      .setContent(aircraftPopupHTML(best))
+      .openOn(GMAP);
+    /* the popup content is a placeholder until the lookups land */
+    fillAircraftPopup(best, GMAP._popup);
+  });
 
   GMAP.off("popupopen").on("popupopen", e => {
     const link = e.popup.getElement() && e.popup.getElement().querySelector(".ac-brief");
