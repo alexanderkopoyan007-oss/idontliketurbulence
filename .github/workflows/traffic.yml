@@ -26,6 +26,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      # Needed before any git command: the runner starts with an empty
+      # directory, not a clone. Depth 1 is enough — the publish step throws the
+      # history away and starts an orphan branch anyway.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Fetch the global feed
         id: fetch
         run: |
