@@ -275,6 +275,10 @@ function volFrame(){
   const { gl, prog } = VOL;
   if (!gl) return;
   const c = VOL.canvas;
+  /* Anything thrown in here kills the animation loop for good and leaves a
+     black canvas with the reason buried in a frame callback. Fail loudly and
+     stop, rather than silently. */
+  if (!c){ volStatus("<span>Renderer stopped</span><div>The canvas went missing. Reload and try again.</div>", "err"); return; }
   const dpr = Math.min(devicePixelRatio || 1, 2);
   /* A hidden or not-yet-laid-out canvas measures 0, which would make the aspect
      ratio NaN and paint nothing. Skip the frame and try again next tick. */
@@ -372,7 +376,10 @@ function startVolume(){
   catch(e){ return volStatus(`<span>WebGL error</span><div>${e.message}</div>`, "err"); }
   if (!ctx) return volStatus(
     "<span>No WebGL2</span><div>This browser cannot create a WebGL2 context, so the volume cannot be drawn. Everything else on the site still works.</div>", "err");
-  Object.assign(VOL, ctx, { nx:v.nx, ny:v.ny, nz:v.nz, meta:v, steps:96, lastFrames:[] });
+  /* canvas belongs in here too: volFrame reads VOL.canvas every frame, and
+     leaving it null threw on the first frame and killed the render loop
+     silently — a black canvas with the error buried in an animation frame. */
+  Object.assign(VOL, ctx, { canvas:c, nx:v.nx, ny:v.ny, nz:v.nz, meta:v, steps:96, lastFrames:[] });
   volStatus("");
   $("#volWrap").hidden = false;
   $("#volMeta").textContent =
