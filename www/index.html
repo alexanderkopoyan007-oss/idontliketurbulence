@@ -15702,9 +15702,28 @@ mountSeeing();
    module it touches is already wired up. */
 restoreFromHash();
 
-/* service worker, when served over http(s) */
-if ("serviceWorker" in navigator && location.protocol.startsWith("http"))
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+/* Service worker, when served over http(s).
+
+   The worker has to be able to replace itself. A cache-first worker serves the
+   old shell, and a fix shipped INSIDE that shell can never run — the only way
+   out was clearing site data by hand, which is not a thing to ask of anyone.
+
+   So: ask for an update on every load, and when a new worker takes control of a
+   page that already had one, reload once. The guard on hadController matters —
+   controllerchange also fires on the very first install, where reloading would
+   be pointless churn on a first visit. */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("sw.js")
+    .then(reg => { reg.update(); })
+    .catch(() => {});
+}
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 </body>
