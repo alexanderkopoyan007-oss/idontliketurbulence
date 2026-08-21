@@ -86,6 +86,69 @@ function buildVolume(R, nx = 96, ny = 64, nz = 24){
            distNM: R.route.distNM, topFL: VOL_FL_TOP };
 }
 
+/* ─── overlay labels ───────────────────────────────────────────────────────
+   The render is legible once you know what you are looking at, and baffling
+   before that: a coloured cloud with no ends, no scale and no key. These labels
+   are HTML positioned over the canvas rather than drawn in the shader — crisp
+   text in a raymarcher is a lot of work and improves none of the physics.
+
+   The volume is the unit cube. X runs departure to arrival, Y is altitude from
+   the ground to FL480, Z is the (unresolved) cross-track axis. */
+function volProject(p){
+  const c = VOL.canvas; if (!c) return null;
+  const m = volMatrix(VOL.yaw, VOL.pitch);
+  const cp = Math.cos(VOL.pitch), sp = Math.sin(VOL.pitch), d = VOL.dist;
+  const eye = [Math.sin(VOL.yaw)*cp*d, sp*d, Math.cos(VOL.yaw)*cp*d];
+  const w = [p[0]-eye[0], p[1]-eye[1], p[2]-eye[2]];
+  /* camRot is orthonormal, so the inverse is the transpose: columns dot the vector */
+  const cam = [
+    m[0]*w[0] + m[1]*w[1] + m[2]*w[2],
+    m[3]*w[0] + m[4]*w[1] + m[5]*w[2],
+    m[6]*w[0] + m[7]*w[1] + m[8]*w[2],
+  ];
+  if (cam[2] > -0.05) return null;                    // at or behind the camera
+  const aspect = c.clientWidth / Math.max(1, c.clientHeight);
+  const ndcX = cam[0] * (-1.6/cam[2]) / aspect;
+  const ndcY = cam[1] * (-1.6/cam[2]);
+  const x = (ndcX*0.5 + 0.5) * c.clientWidth;
+  const y = (1 - (ndcY*0.5 + 0.5)) * c.clientHeight;
+  if (!isFinite(x) || !isFinite(y)) return null;
+  return { x, y };
+}
+
+/* Altitude in feet to the cube's Y axis, which spans ground to FL480. */
+function volY(ft){ return clamp(ft/(VOL_FL_TOP*100), 0, 1)*2 - 1; }
+
+function drawVolLabels(){
+  const host = $("#volLabels");
+  if (!host || !VOL.meta || typeof RES === "undefined" || !RES) return;
+  const R = RES, m = VOL.meta, out = [];
+  const add = (p, cls, text) => {
+    const s = volProject(p);
+    if (!s) return;
+    out.push('<b class="' + cls + '" style="left:' + s.x.toFixed(1) +
+             'px;top:' + s.y.toFixed(1) + 'px">' + text + '</b>');
+  };
+
+  /* The two ends of the flight, at the height the aircraft is actually at. */
+  add([-1, volY(m.path[0]*VOL_FL_TOP*100), 0], "vl-port", R.route.dep.iata);
+  add([ 1, volY(m.path[m.nx-1]*VOL_FL_TOP*100), 0], "vl-port", R.route.arr.iata);
+
+  /* An altitude scale up the departure edge, so height means something. */
+  for (const fl of [100, 200, 300, 400]) add([-1, volY(fl*100), -1], "vl-tick", "FL" + fl);
+
+  /* Name the things that are not turbulence, where they actually sit. */
+  if ($("#volTrop") && $("#volTrop").checked){
+    const tropFt = (m.trop[Math.floor(m.nx/2)] || 0) * VOL_FL_TOP * 100;
+    if (tropFt > 0) add([0, volY(tropFt), 1], "vl-note", "tropopause");
+  }
+  if ($("#volTerr") && $("#volTerr").checked) add([0, -1, 1], "vl-note", "ground");
+  if (R.jet && $("#volJet") && $("#volJet").checked)
+    add([0.45, volY(R.jet.ft), -1], "vl-jet", kt(R.jet.spd) + " kt jet");
+
+  host.innerHTML = out.join("");
+}
+
 /* ─── shaders ─── */
 const VOL_VS = `#version 300 es
 in vec2 p; out vec2 uv;
@@ -316,6 +379,7 @@ function volFrame(){
     const s = $("#volPerf");
     if (s) s.textContent = `${VOL.steps} steps · ${avg.toFixed(1)} ms/frame`;
   }
+  drawVolLabels();
   VOL.raf = requestAnimationFrame(volFrame);
 }
 

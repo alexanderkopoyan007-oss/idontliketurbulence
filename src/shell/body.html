@@ -128,8 +128,19 @@
       <label><input type="checkbox" id="volTerr" checked> Terrain</label>
       <label><input type="checkbox" id="volFollow"> Orbit</label>
       <span class="sub" id="volPerf"></span>
+      <span class="sub vol-hint">left edge is departure, right is arrival &middot; height is altitude</span>
     </div>
-    <canvas id="volCanvas"></canvas>
+    <div class="vol-stage">
+      <canvas id="volCanvas"></canvas>
+      <div id="volLabels" class="vol-labels" aria-hidden="true"></div>
+      <div class="vol-key">
+        <div class="vk-row"><span class="vk-ramp"></span><u>turbulence &mdash; smooth to severe</u></div>
+        <div class="vk-row"><i class="vk-dot jet"></i><u>jet stream, 30 m/s surface</u></div>
+        <div class="vk-row"><i class="vk-dot trop"></i><u>tropopause</u></div>
+        <div class="vk-row"><i class="vk-dot path"></i><u>your flight path</u></div>
+        <div class="vk-row"><i class="vk-dot terr"></i><u>terrain</u></div>
+      </div>
+    </div>
     <p class="sub" id="volMeta"></p>
     <p class="vol-note"><b>The cross-track axis carries no turbulence information.</b>
       The analysis samples two points either side of track, but spends them on the horizontal

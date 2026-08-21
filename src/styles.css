@@ -534,3 +534,26 @@ body.calm #vWord{ color:var(--vellum)!important }
 .acpop-none{color:var(--dim-2); font-size:12px}
 .acpop-src{color:var(--dim-2); font-size:10.5px; margin:6px 0 8px !important}
 .acpop .act{padding:8px 11px; font-size:11px; width:100%}
+
+/* ─────────── volume overlay ─────────── */
+.vol-stage{position:relative}
+.vol-labels{position:absolute; inset:0; pointer-events:none; overflow:hidden}
+.vol-labels b{position:absolute; transform:translate(-50%,-50%); white-space:nowrap;
+  font:600 11px/1 var(--mono); letter-spacing:.04em; padding:3px 6px; border-radius:4px;
+  background:rgba(7,11,20,.72); border:1px solid var(--rule-2); color:var(--vellum)}
+.vol-labels b.vl-port{font:700 12.5px/1 var(--disp); letter-spacing:.1em;
+  color:var(--amber-ink); background:var(--amber); border-color:var(--amber)}
+.vol-labels b.vl-tick{color:var(--dim); font-size:10px; padding:2px 5px}
+.vol-labels b.vl-note{color:var(--dim); font-size:10px; text-transform:lowercase}
+.vol-labels b.vl-jet{color:#8FD4F5; border-color:#2C5B7A}
+.vol-key{position:absolute; left:10px; bottom:10px; pointer-events:none;
+  background:rgba(7,11,20,.78); border:1px solid var(--rule); border-radius:var(--r-s); padding:8px 10px}
+.vk-row{display:flex; align-items:center; gap:7px; margin:3px 0}
+.vk-row u{text-decoration:none; font-size:10.5px; color:var(--dim)}
+.vk-ramp{width:42px; height:7px; border-radius:2px; display:block;
+  background:linear-gradient(90deg,#12695F,#1FC8B4,#9BD93F,#FFC93C,#FF8A3D,#F04A63,#C766FF)}
+.vk-dot{width:10px; height:10px; border-radius:2px; display:block}
+.vk-dot.jet{background:#6BB8FF} .vk-dot.trop{background:#8C9EC7}
+.vk-dot.path{background:var(--amber)} .vk-dot.terr{background:#2A3543}
+.vol-hint{color:var(--dim-2)}
+@media (max-width:560px){ .vol-key{display:none} }
