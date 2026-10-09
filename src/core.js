@@ -162,3 +162,37 @@ const kt     = ms => Math.round(ms*1.94384);
 const dateISO = d => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())}`;
 const hourISO = d => `${dateISO(d)}T${pad2(d.getUTCHours())}:00`;
 const $ = s => document.querySelector(s);
+
+/* ─── 6. basemap ────────────────────────────────────────────────────────
+   Esri's dark canvas, in two layers: an opaque base and a transparent
+   sheet of place names over it. Free, no key, no sign-up; attribution is
+   required and carried below.
+
+   This replaced CARTO's dark_all, which stopped serving real tiles. The
+   failure was quiet in the worst way — every request still answered 200
+   with a well-formed 256x256 PNG, so Leaflet reported every tile loaded
+   and raised no error. The images were simply blank: 2,513 bytes each,
+   byte-identical over London, Europe and the whole world. The map was
+   built perfectly and showed nothing.
+
+   Leaflet cannot detect that, and neither can any in-page check — a
+   blank tile is a valid tile. What gives it away is that a real tile's
+   size tracks the geography beneath it while a placeholder is the same
+   everywhere, which is what tools/check-basemap.sh tests for. If the
+   map ever goes empty again, run that first.
+
+   Both maps draw through here so there is one source to change. */
+const BASEMAP_ATTR =
+  'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, ' +
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+function addBasemap(map, maxZoom){
+  const tiles = kind =>
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_" +
+    kind + "/MapServer/tile/{z}/{y}/{x}";          /* note: y before x */
+  L.tileLayer(tiles("Base"), { maxZoom, attribution: BASEMAP_ATTR }).addTo(map);
+  /* Labels go on second so they sit above the base, and stay in the tile
+     pane so the route and its markers still draw over them. */
+  L.tileLayer(tiles("Reference"), { maxZoom }).addTo(map);
+  return map;
+}

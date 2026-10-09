@@ -363,8 +363,18 @@ are kept at any size, which is why the Sahara survives and Polynesia does not.
 | [NOAA AWC](https://aviationweather.gov/) | international SIGMETs (best effort, CORS-blocked from some origins) | public domain |
 | [Natural Earth](https://www.naturalearthdata.com/) | physical feature gazetteer (50m regions) | public domain (CC0) |
 | [NOAA SWPC](https://services.swpc.noaa.gov/) | planetary K index forecast, for aurora | public domain |
-| [CARTO](https://carto.com/attributions) + [OpenStreetMap](https://www.openstreetmap.org/copyright) | basemap tiles | CC BY, ODbL |
+| [Esri Dark Gray Canvas](https://www.arcgis.com/home/item.html?id=358ec1e175ea41c3bf5c68f0da11ae2b) (Esri, HERE, Garmin, [OSM](https://www.openstreetmap.org/copyright)) | basemap tiles | free, no key, attribution required |
 | [Leaflet](https://leafletjs.com/) | map rendering | BSD-2 |
+
+**The basemap can die quietly.** CARTO's keyless `dark_all` was the original source. It
+stopped carrying map data and never said so — it kept answering `200` with a valid
+256×256 PNG that happened to be blank, the same 2,513 bytes over London, Europe and the
+whole world. Leaflet reported every tile loaded, no error fired anywhere, and the map
+rendered perfectly empty. Nothing in the page can catch that, because a blank tile is a
+valid tile. `tools/check-basemap.sh` catches it from outside, by fetching three tiles
+over unrelated ground and asserting they differ. **If the map ever goes blank, run that
+before reading any code.** Both maps draw through `addBasemap()` in `src/core.js`, so
+swapping sources is a one-line change.
 
 Filed routes are matched **by flight number first**, then by city pair. A plan filed for a
 city pair is not the plan filed for a specific flight on a specific day — oceanic tracks
@@ -420,7 +430,8 @@ ordinary address (Fly.io, Render) would fix it.
 ```bash
 ./build.sh              # src/ → www/index.html
 ./build.sh --check      # verify www/index.html matches a fresh build
-npm test                # vitest, 137 tests: geodesy, EDR, CAT, astro, seeing, jetlag, share, calm
+npm test                # vitest, 283 tests across 15 files
+./tools/check-basemap.sh # is the tile source still serving real map data?
 ./start.sh              # serve www/ on :8080 (macOS ruby, no installs)
 ./stop.sh
 ```

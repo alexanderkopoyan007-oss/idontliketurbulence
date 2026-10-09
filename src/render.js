@@ -198,10 +198,7 @@ function drawMap(){
     '<div style="padding:26px;color:#8DA0B8;font-size:13.5px">The map library did not load. Everything else on this page still works — the cross-section and segment log carry the same forecast.</div>'; return; }
   if (!MAP){
     MAP = L.map("map", { zoomControl:true, attributionControl:true, worldCopyJump:false });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      subdomains:"abcd", maxZoom:16,
-      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    }).addTo(MAP);
+    addBasemap(MAP, 16);
   }
   MAPLAYERS.forEach(l => MAP.removeLayer(l)); MAPLAYERS = [];
   LON_REF = R.route.dep.lon;

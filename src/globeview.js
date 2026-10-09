@@ -29,10 +29,7 @@ function mountGlobe(){
 function ensureGMap(){
   if (GMAP) return GMAP;
   GMAP = L.map("gmap", { zoomControl: true, worldCopyJump: false }).setView([48, 5], 4);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    subdomains: "abcd", maxZoom: 9,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  }).addTo(GMAP);
+  addBasemap(GMAP, 9);
   GMAP.on("moveend", () => {
     const p = areaPlan();
     $("#gCost").textContent = `${p.points} grid points · ${p.chunks} request${p.chunks===1?"":"s"} for this view`;
